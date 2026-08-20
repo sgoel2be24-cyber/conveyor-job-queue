@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"conveyor/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 // DefaultDispatchTick is how often the dispatcher wakes on its own. Submissions

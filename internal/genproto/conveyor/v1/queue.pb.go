@@ -1556,7 +1556,7 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\x05Lease\x12\x19.conveyor.v1.LeaseRequest\x1a\x1a.conveyor.v1.LeaseResponse0\x01\x128\n" +
 	"\x03Ack\x12\x17.conveyor.v1.AckRequest\x1a\x18.conveyor.v1.AckResponse\x12;\n" +
 	"\x04Nack\x12\x18.conveyor.v1.NackRequest\x1a\x19.conveyor.v1.NackResponse\x12J\n" +
-	"\tHeartbeat\x12\x1d.conveyor.v1.HeartbeatRequest\x1a\x1e.conveyor.v1.HeartbeatResponseB3Z1conveyor/internal/genproto/conveyor/v1;conveyorv1b\x06proto3"
+	"\tHeartbeat\x12\x1d.conveyor.v1.HeartbeatRequest\x1a\x1e.conveyor.v1.HeartbeatResponseBYZWgithub.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1;conveyorv1b\x06proto3"
 
 var (
 	file_conveyor_v1_queue_proto_rawDescOnce sync.Once

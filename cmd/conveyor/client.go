@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"conveyor/internal/genproto/conveyor/v1/conveyorv1connect"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
 )
 
 // newClient dials a broker. addr may be given bare ("localhost:7777") or as a

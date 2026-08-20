@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"conveyor/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 // testConfig makes retries effectively instant so tests can drive a job through

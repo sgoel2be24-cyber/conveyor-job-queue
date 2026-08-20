@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"conveyor/internal/job"
-	"conveyor/internal/wal"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/wal"
 )
 
 const (

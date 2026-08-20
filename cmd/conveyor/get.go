@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
 )
 
 var getBrokerAddr string

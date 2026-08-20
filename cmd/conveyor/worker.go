@@ -9,9 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"conveyor/internal/handler"
-	"conveyor/internal/job"
-	"conveyor/internal/worker"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/handler"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/worker"
 )
 
 var (

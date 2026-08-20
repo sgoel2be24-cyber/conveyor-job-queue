@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
-	"conveyor/internal/genproto/conveyor/v1/conveyorv1connect"
-	"conveyor/internal/job"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 // Lease duration bounds. A lease too short gets reclaimed out from under a

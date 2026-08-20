@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"conveyor/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 // eventType identifies a state transition recorded in the WAL.

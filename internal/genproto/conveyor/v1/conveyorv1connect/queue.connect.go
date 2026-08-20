@@ -7,8 +7,8 @@ package conveyorv1connect
 import (
 	connect "connectrpc.com/connect"
 	context "context"
-	v1 "conveyor/internal/genproto/conveyor/v1"
 	errors "errors"
+	v1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
 	http "net/http"
 	strings "strings"
 )

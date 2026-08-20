@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
 )
 
 // displayState renders a job state the way the docs and CLI flags spell it,

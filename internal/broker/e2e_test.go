@@ -16,11 +16,11 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"conveyor/internal/broker"
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
-	"conveyor/internal/genproto/conveyor/v1/conveyorv1connect"
-	"conveyor/internal/handler"
-	"conveyor/internal/worker"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/broker"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/handler"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/worker"
 )
 
 func discardLogger() *slog.Logger {

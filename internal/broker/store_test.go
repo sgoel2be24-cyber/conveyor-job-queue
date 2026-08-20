@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"conveyor/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 func mustOpenStore(t *testing.T, dir string) *Store {

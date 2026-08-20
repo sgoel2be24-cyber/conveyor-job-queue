@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
-	"conveyor/internal/job"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 var (

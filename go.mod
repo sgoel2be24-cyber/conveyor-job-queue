@@ -1,4 +1,4 @@
-module conveyor
+module github.com/sgoel2be24-cyber/conveyor-job-queue
 
 go 1.27.0
 

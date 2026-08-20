@@ -1,6 +1,6 @@
 package broker
 
-import "conveyor/internal/wal"
+import "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/wal"
 
 // openSmallSegmentWAL opens a log with a deliberately tiny segment size so tests
 // can exercise rotation and truncation without writing megabytes.

@@ -4,7 +4,7 @@ import (
 	"container/heap"
 	"time"
 
-	"conveyor/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
 )
 
 // indexEntry is a job's scheduling key. It deliberately holds a copy rather

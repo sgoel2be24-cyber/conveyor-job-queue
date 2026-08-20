@@ -15,8 +15,8 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"conveyor/internal/broker"
-	"conveyor/internal/genproto/conveyor/v1/conveyorv1connect"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/broker"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
 )
 
 var (

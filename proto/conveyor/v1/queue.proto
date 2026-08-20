@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package conveyor.v1;
 
-option go_package = "conveyor/internal/genproto/conveyor/v1;conveyorv1";
+option go_package = "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1;conveyorv1";
 
 // BrokerService is the RPC surface for both producers (Submit) and workers
 // (Lease/Ack/Nack/Heartbeat), plus operator introspection (Stats/Get).

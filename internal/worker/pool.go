@@ -11,9 +11,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	conveyorv1 "conveyor/internal/genproto/conveyor/v1"
-	"conveyor/internal/genproto/conveyor/v1/conveyorv1connect"
-	"conveyor/internal/handler"
+	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/handler"
 )
 
 // reportTimeout bounds how long a worker will spend telling the broker how a
