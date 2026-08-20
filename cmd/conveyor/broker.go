@@ -54,8 +54,21 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 		"took", time.Since(start),
 	)
 
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// The dispatcher owns lease placement and reclaim; the server just exposes
+	// it. Start it before serving so a worker connecting immediately finds a
+	// running loop.
+	dispatcher := broker.NewDispatcher(store, logger)
+	dispatcherDone := make(chan struct{})
+	go func() {
+		defer close(dispatcherDone)
+		dispatcher.Run(ctx)
+	}()
+
 	mux := http.NewServeMux()
-	path, handler := conveyorv1connect.NewBrokerServiceHandler(broker.NewServer(store))
+	path, handler := conveyorv1connect.NewBrokerServiceHandler(broker.NewServer(store, dispatcher))
 	mux.Handle(path, handler)
 
 	// h2c serves HTTP/2 without TLS, which the streaming Lease RPC will want
@@ -65,9 +78,6 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 		Handler:           h2c.NewHandler(mux, &http2.Server{}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Periodic snapshots keep recovery time bounded; without them the WAL grows
 	// forever even though most jobs end up terminal.
@@ -109,6 +119,7 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 		logger.Error("graceful shutdown failed", "err", err)
 	}
 	<-snapDone
+	<-dispatcherDone
 
 	// A final snapshot is an optimization, not a correctness requirement: every
 	// acknowledged job is already durable in the WAL.

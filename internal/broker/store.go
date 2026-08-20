@@ -27,51 +27,106 @@ const (
 	// than one means a snapshot that turns out to be unreadable does not cost
 	// us the whole recovery.
 	snapshotsKept = 2
+
+	// defaultEpochBlockSize is how many fencing tokens are claimed per durable
+	// reservation. See reserveEpochsLocked.
+	defaultEpochBlockSize = 1 << 20
 )
 
-// ErrQueueRequired is returned when a submission omits its queue.
-var ErrQueueRequired = errors.New("broker: queue is required")
+var (
+	// ErrQueueRequired is returned when a submission omits its queue.
+	ErrQueueRequired = errors.New("broker: queue is required")
+	// ErrJobNotFound is returned when an operation names an unknown job.
+	ErrJobNotFound = errors.New("broker: job not found")
+	// ErrNotDeadLettered is returned when replaying a job that is not in the
+	// dead-letter queue.
+	ErrNotDeadLettered = errors.New("broker: job is not dead-lettered")
+)
 
-// Store is the durable job store: a write-ahead log plus the in-memory index
+// Config parameterizes a Store.
+type Config struct {
+	// Dir roots the WAL and snapshot directories.
+	Dir string
+	// BackoffBase and BackoffCap bound the retry delay. Zero means the defaults
+	// in the job package.
+	BackoffBase time.Duration
+	BackoffCap  time.Duration
+	// EpochBlockSize is how many fencing tokens to claim per durable
+	// reservation. Zero means defaultEpochBlockSize.
+	EpochBlockSize uint64
+}
+
+// Store is the durable job store: a write-ahead log plus the in-memory state
 // rebuilt from it.
 //
-// Every mutation is written to the WAL and flushed to stable storage *before*
-// it is applied in memory and acknowledged to the caller. A job the store has
-// acknowledged therefore survives a crash; a job whose submission was still in
-// flight may not, which is the guarantee producers are given.
+// Mutations that a caller is waiting on -- submissions, acks, failures -- are
+// flushed to stable storage before they are applied in memory and
+// acknowledged. Leases are not: see Lease.
 type Store struct {
 	dir     string
 	snapDir string
 
+	backoffBase    time.Duration
+	backoffCap     time.Duration
+	epochBlockSize uint64
+
 	mu      sync.RWMutex
 	log     *wal.WAL
 	jobs    map[string]*job.Job
-	idem    map[string]string // queue \x00 idempotency-key -> job ID
+	idem    map[string]string   // queue \x00 idempotency-key -> job ID
+	leased  map[string]struct{} // job IDs currently out on lease
+	index   *scheduleIndex
 	lastLSN uint64
+
+	// nextEpoch is the next fencing token to hand out; epochReservedUpTo is the
+	// highest one the log says we may hand out without another reservation.
+	nextEpoch         uint64
+	epochReservedUpTo uint64
+
+	notifyCh chan struct{}
 }
 
-// OpenStore opens the store rooted at dir, recovering state from the newest
+// OpenStore opens the store rooted at dir with default settings.
+func OpenStore(dir string) (*Store, error) { return Open(Config{Dir: dir}) }
+
+// Open opens the store described by cfg, recovering state from the newest
 // usable snapshot plus any WAL records written after it.
-func OpenStore(dir string) (*Store, error) {
-	if dir == "" {
+func Open(cfg Config) (*Store, error) {
+	if cfg.Dir == "" {
 		return nil, errors.New("broker: data dir is required")
 	}
-	snapDir := filepath.Join(dir, snapshotDirName)
+	if cfg.BackoffBase <= 0 {
+		cfg.BackoffBase = job.DefaultBackoffBase
+	}
+	if cfg.BackoffCap <= 0 {
+		cfg.BackoffCap = job.DefaultBackoffCap
+	}
+	if cfg.EpochBlockSize == 0 {
+		cfg.EpochBlockSize = defaultEpochBlockSize
+	}
+
+	snapDir := filepath.Join(cfg.Dir, snapshotDirName)
 	if err := os.MkdirAll(snapDir, 0o755); err != nil {
 		return nil, fmt.Errorf("broker: create snapshot dir: %w", err)
 	}
 
-	log, err := wal.Open(wal.Options{Dir: filepath.Join(dir, walDirName)})
+	log, err := wal.Open(wal.Options{Dir: filepath.Join(cfg.Dir, walDirName)})
 	if err != nil {
 		return nil, err
 	}
 
 	s := &Store{
-		dir:     dir,
-		snapDir: snapDir,
-		log:     log,
-		jobs:    make(map[string]*job.Job),
-		idem:    make(map[string]string),
+		dir:            cfg.Dir,
+		snapDir:        snapDir,
+		backoffBase:    cfg.BackoffBase,
+		backoffCap:     cfg.BackoffCap,
+		epochBlockSize: cfg.EpochBlockSize,
+		log:            log,
+		jobs:           make(map[string]*job.Job),
+		idem:           make(map[string]string),
+		leased:         make(map[string]struct{}),
+		index:          newScheduleIndex(),
+		notifyCh:       make(chan struct{}, 1),
 	}
 
 	snapLSN, err := s.loadLatestSnapshot()
@@ -81,7 +136,6 @@ func OpenStore(dir string) (*Store, error) {
 	}
 	s.lastLSN = snapLSN
 
-	// Replay everything the snapshot does not already account for.
 	err = log.Replay(snapLSN+1, func(lsn uint64, payload []byte) error {
 		e, err := decodeEvent(payload)
 		if err != nil {
@@ -98,12 +152,27 @@ func OpenStore(dir string) (*Store, error) {
 		return nil, fmt.Errorf("broker: replay: %w", err)
 	}
 
+	now := time.Now().UTC()
+	s.recoverLeasedLocked(now)
+	s.rebuildIndexLocked(now)
+
+	// Any token up to epochReservedUpTo might already have been handed out
+	// before the crash, so resume strictly above it. The first lease will
+	// reserve the next block.
+	s.nextEpoch = s.epochReservedUpTo + 1
+
 	return s, nil
 }
 
-// apply mutates the in-memory index. It must be deterministic and must not
-// touch disk: it runs both for live writes and for every record during replay,
-// and the two paths have to agree exactly.
+// apply mutates in-memory state. It must be deterministic and must not touch
+// disk or a clock: it runs both for live writes and for every record during
+// replay, and the two paths have to agree exactly. Anything time- or
+// randomness-dependent is resolved before the event is written and carried in
+// the event itself.
+//
+// apply deliberately does not maintain the schedule index. That index is
+// derived state, rebuilt wholesale after replay (see rebuildIndexLocked) so
+// that replaying a long history does not accumulate an entry per transition.
 func (s *Store) apply(e *event) error {
 	switch e.Type {
 	case eventSubmit:
@@ -116,10 +185,174 @@ func (s *Store) apply(e *event) error {
 			s.idem[idemKey(j.Queue, j.IdempotencyKey)] = j.ID
 		}
 		return nil
+
+	case eventLease:
+		j, ok := s.jobs[e.JobID]
+		if !ok {
+			return fmt.Errorf("lease for unknown job %s", e.JobID)
+		}
+		j.State = job.StateLeased
+		j.Epoch = e.Epoch
+		j.LeasedBy = e.WorkerID
+		j.LeaseExpiresAt = e.LeaseExpiresAt
+		j.Attempt = e.Attempt
+		s.leased[j.ID] = struct{}{}
+		return nil
+
+	case eventAck:
+		j, ok := s.jobs[e.JobID]
+		if !ok {
+			return fmt.Errorf("ack for unknown job %s", e.JobID)
+		}
+		j.State = job.StateDone
+		j.LeasedBy = ""
+		j.LeaseExpiresAt = time.Time{}
+		delete(s.leased, j.ID)
+		return nil
+
+	case eventFail:
+		j, ok := s.jobs[e.JobID]
+		if !ok {
+			return fmt.Errorf("fail for unknown job %s", e.JobID)
+		}
+		j.State = e.NextState
+		j.Attempt = e.Attempt
+		j.EligibleAt = e.EligibleAt
+		j.LastError = e.Reason
+		j.LeasedBy = ""
+		j.LeaseExpiresAt = time.Time{}
+		delete(s.leased, j.ID)
+		return nil
+
+	case eventReplayJob:
+		j, ok := s.jobs[e.JobID]
+		if !ok {
+			return fmt.Errorf("replay for unknown job %s", e.JobID)
+		}
+		j.State = job.StatePending
+		j.Attempt = 0
+		j.EligibleAt = e.EligibleAt
+		j.LastError = ""
+		j.LeasedBy = ""
+		j.LeaseExpiresAt = time.Time{}
+		delete(s.leased, j.ID)
+		return nil
+
+	case eventEpochReserve:
+		s.epochReservedUpTo = e.ReservedUpTo
+		return nil
+
 	default:
 		return fmt.Errorf("unknown event type %q", e.Type)
 	}
 }
+
+// recoverLeasedLocked releases every lease that was outstanding when the
+// previous process died.
+//
+// A worker still holding one of these leases is, by definition, talking to a
+// process that no longer exists, so the job must become available again --
+// redelivering it is exactly the at-least-once contract. The job keeps the
+// attempt that was charged when it was leased: a broker crash is not the job's
+// fault, but declining to count it would let a payload that reliably kills the
+// broker be redelivered forever.
+//
+// This is not logged. It is a pure function of the replayed state, so a crash
+// during recovery simply produces the same result next time.
+func (s *Store) recoverLeasedLocked(now time.Time) {
+	for _, j := range s.jobs {
+		if j.State != job.StateLeased {
+			continue
+		}
+		j.State = job.StateRetryWait
+		j.LeasedBy = ""
+		j.LeaseExpiresAt = time.Time{}
+		j.EligibleAt = now
+		j.LastError = "broker restarted while job was leased"
+	}
+	s.leased = make(map[string]struct{})
+}
+
+func (s *Store) rebuildIndexLocked(now time.Time) {
+	s.index = newScheduleIndex()
+	for _, j := range s.jobs {
+		if j.State.Leasable() {
+			s.index.push(j, now)
+		}
+	}
+}
+
+// Notify returns a channel that receives when work may have become available.
+// Sends are non-blocking and coalesced, so a reader that is busy misses nothing
+// beyond a redundant wakeup.
+func (s *Store) Notify() <-chan struct{} { return s.notifyCh }
+
+func (s *Store) signal() {
+	select {
+	case s.notifyCh <- struct{}{}:
+	default:
+	}
+}
+
+// ---------------------------------------------------------------- fencing ---
+
+// nextEpochLocked returns the next fencing token.
+func (s *Store) nextEpochLocked() (uint64, error) {
+	if s.nextEpoch > s.epochReservedUpTo {
+		if err := s.reserveEpochsLocked(); err != nil {
+			return 0, err
+		}
+	}
+	e := s.nextEpoch
+	s.nextEpoch++
+	return e, nil
+}
+
+// reserveEpochsLocked durably claims the next block of fencing tokens.
+//
+// Fencing only works if tokens never repeat across a crash. The obvious way to
+// guarantee that is to flush every lease, but a lease is the most frequent
+// write in the system and flushing costs milliseconds -- it would cap the whole
+// broker at a few hundred leases a second.
+//
+// Instead we log, once, that everything up to some ceiling may be handed out,
+// and then hand tokens out from that block for free. Recovery resumes above the
+// last recorded ceiling, so tokens issued before a crash can never be issued
+// again -- even the ones whose lease records never reached the disk. One flush
+// per block (a million tokens by default) instead of one per lease.
+//
+// This is the same trick as a HiLo key allocator, and the same reason Raft has
+// a persistent term: cheap monotonicity across restarts.
+func (s *Store) reserveEpochsLocked() error {
+	e := &event{Type: eventEpochReserve, ReservedUpTo: s.nextEpoch + s.epochBlockSize - 1}
+	payload, err := encodeEvent(e)
+	if err != nil {
+		return err
+	}
+	lsn, err := s.log.AppendSync(payload)
+	if err != nil {
+		return fmt.Errorf("broker: reserve epochs: %w", err)
+	}
+	if err := s.apply(e); err != nil {
+		return err
+	}
+	s.lastLSN = lsn
+	return nil
+}
+
+// holdsLease reports whether a message carrying this epoch comes from the
+// worker that currently holds the job.
+//
+// Both halves matter. The epoch check rejects a worker whose lease was
+// reclaimed and reissued to someone else. The state check rejects a worker
+// whose lease was reclaimed and *not* yet reissued -- a reclaimed job keeps the
+// epoch of the lease that timed out, so epoch equality alone would accept a
+// zombie's Ack and mark work done that nobody is doing.
+func holdsLease(j *job.Job, epoch uint64) bool {
+	return j.State == job.StateLeased && j.Epoch == epoch
+}
+
+// ----------------------------------------------------------- transitions ---
 
 // SubmitParams describes a job to enqueue.
 type SubmitParams struct {
@@ -168,7 +401,8 @@ func (s *Store) Submit(p SubmitParams) (*job.Job, bool, error) {
 		EligibleAt:     now.Add(p.Delay),
 	}
 
-	payload, err := encodeEvent(&event{Type: eventSubmit, Job: j})
+	e := &event{Type: eventSubmit, Job: j}
+	payload, err := encodeEvent(e)
 	if err != nil {
 		return nil, false, err
 	}
@@ -176,20 +410,281 @@ func (s *Store) Submit(p SubmitParams) (*job.Job, bool, error) {
 	// Durable first, in-memory second: if the append fails, nothing has changed
 	// and the caller learns the job was not accepted.
 	//
-	// The fsync happens under s.mu, which serializes submissions. That is the
-	// throughput ceiling this design deliberately starts with, and the baseline
-	// the group-commit work measures against (docs/DESIGN.md).
+	// The flush happens under s.mu, which serializes submissions. That is the
+	// throughput ceiling this design starts with, and the baseline the
+	// group-commit work measures against (docs/DESIGN.md).
 	lsn, err := s.log.AppendSync(payload)
 	if err != nil {
 		return nil, false, fmt.Errorf("broker: append: %w", err)
 	}
-
-	if err := s.apply(&event{Type: eventSubmit, Job: j}); err != nil {
+	if err := s.apply(e); err != nil {
 		return nil, false, err
 	}
 	s.lastLSN = lsn
+	s.index.push(j, now)
+	s.signal()
 	return j.Clone(), false, nil
 }
+
+// Lease hands the next eligible job on a queue to a worker, or returns nil if
+// there is nothing to run. dur is how long the worker may hold it before the
+// broker reclaims it.
+//
+// The lease record is appended but deliberately *not* flushed. Losing it in a
+// crash costs nothing: recovery releases every outstanding lease anyway
+// (recoverLeasedLocked), so the job simply becomes available again, which
+// at-least-once delivery already permits. Fencing tokens stay sound across that
+// loss because they are reserved separately -- see reserveEpochsLocked.
+//
+// Writes to a file are ordered, so the flush performed by a later Ack or fail
+// also makes any lease records before it durable, for free.
+func (s *Store) Lease(queue, workerID string, dur time.Duration) (*job.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC()
+	s.index.promote(queue, now)
+
+	for {
+		cand, ok := s.index.pop(queue)
+		if !ok {
+			return nil, nil
+		}
+		j, exists := s.jobs[cand.id]
+		switch {
+		case !exists, !j.State.Leasable():
+			continue // the job moved on after this entry was filed
+		case !cand.eligibleAt.Equal(j.EligibleAt):
+			continue // superseded: a newer entry for this job is already filed
+		case j.EligibleAt.After(now):
+			// Defensive; promote should not have moved this one. Re-file it as
+			// delayed rather than dropping it. This cannot loop, because the
+			// ready heap only shrinks here.
+			s.index.push(j, now)
+			continue
+		}
+
+		epoch, err := s.nextEpochLocked()
+		if err != nil {
+			s.index.push(j, now)
+			return nil, err
+		}
+
+		ev := &event{
+			Type:           eventLease,
+			JobID:          j.ID,
+			Epoch:          epoch,
+			WorkerID:       workerID,
+			LeaseExpiresAt: now.Add(dur),
+			Attempt:        j.Attempt + 1,
+		}
+		payload, err := encodeEvent(ev)
+		if err != nil {
+			s.index.push(j, now)
+			return nil, err
+		}
+		lsn, err := s.log.Append(payload)
+		if err != nil {
+			s.index.push(j, now)
+			return nil, fmt.Errorf("broker: append lease: %w", err)
+		}
+		if err := s.apply(ev); err != nil {
+			return nil, err
+		}
+		s.lastLSN = lsn
+		return j.Clone(), nil
+	}
+}
+
+// Ack marks a leased job complete. It reports false, without error, when the
+// caller no longer holds the lease -- the fencing check.
+func (s *Store) Ack(jobID string, epoch uint64) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	j, ok := s.jobs[jobID]
+	if !ok {
+		return false, ErrJobNotFound
+	}
+	if !holdsLease(j, epoch) {
+		return false, nil
+	}
+
+	e := &event{Type: eventAck, JobID: jobID, Epoch: epoch}
+	payload, err := encodeEvent(e)
+	if err != nil {
+		return false, err
+	}
+	lsn, err := s.log.AppendSync(payload)
+	if err != nil {
+		return false, fmt.Errorf("broker: append ack: %w", err)
+	}
+	if err := s.apply(e); err != nil {
+		return false, err
+	}
+	s.lastLSN = lsn
+	s.signal()
+	return true, nil
+}
+
+// Nack reports a failed delivery. It returns whether the caller still held the
+// lease, and whether the job was dead-lettered as a result.
+func (s *Store) Nack(jobID string, epoch uint64, reason string) (accepted, deadLettered bool, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	j, ok := s.jobs[jobID]
+	if !ok {
+		return false, false, ErrJobNotFound
+	}
+	if !holdsLease(j, epoch) {
+		return false, false, nil
+	}
+	if reason == "" {
+		reason = "handler reported failure"
+	}
+
+	deadLettered, err = s.failLocked(j, reason, false, time.Now().UTC())
+	if err != nil {
+		return false, false, err
+	}
+	return true, deadLettered, nil
+}
+
+// failLocked takes a job off a worker after a failed delivery, either
+// scheduling a retry or dead-lettering it.
+//
+// This is the only path for both an explicit Nack and a lease that timed out,
+// and that is deliberate. The two must consume the retry budget identically: if
+// a timeout did not count as an attempt, a job whose handler reliably outlives
+// its lease -- a poison payload, or a handler bug -- would cycle
+// leased -> timeout -> leased forever, never reach the dead-letter queue, and
+// occupy a worker slot on every pass. Routing both through one function makes
+// that invariant structural rather than something two call sites must remember.
+func (s *Store) failLocked(j *job.Job, reason string, timeout bool, now time.Time) (bool, error) {
+	// The attempt was charged when the job was leased.
+	attempt := j.Attempt
+
+	next := job.StateRetryWait
+	eligible := now.Add(job.Backoff(attempt, s.backoffBase, s.backoffCap))
+	if attempt > j.MaxRetries {
+		next = job.StateDeadLetter
+		eligible = now
+	}
+
+	e := &event{
+		Type:       eventFail,
+		JobID:      j.ID,
+		Epoch:      j.Epoch,
+		Attempt:    attempt,
+		Reason:     reason,
+		NextState:  next,
+		EligibleAt: eligible,
+		Timeout:    timeout,
+	}
+	payload, err := encodeEvent(e)
+	if err != nil {
+		return false, err
+	}
+	lsn, err := s.log.AppendSync(payload)
+	if err != nil {
+		return false, fmt.Errorf("broker: append fail: %w", err)
+	}
+	if err := s.apply(e); err != nil {
+		return false, err
+	}
+	s.lastLSN = lsn
+
+	if next == job.StateRetryWait {
+		s.index.push(j, now)
+		s.signal()
+	}
+	return next == job.StateDeadLetter, nil
+}
+
+// Heartbeat extends a lease. It reports false when the caller no longer holds
+// it, which tells a worker it has been fenced and should stop working.
+//
+// This writes nothing to the log. A lease expiry is not durable state --
+// recovery releases every lease regardless of when it was due -- so there is
+// nothing worth persisting, which is what makes heartbeats cheap enough to send
+// often.
+func (s *Store) Heartbeat(jobID string, epoch uint64, dur time.Duration) (bool, time.Time, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	j, ok := s.jobs[jobID]
+	if !ok {
+		return false, time.Time{}, ErrJobNotFound
+	}
+	if !holdsLease(j, epoch) {
+		return false, time.Time{}, nil
+	}
+	j.LeaseExpiresAt = time.Now().UTC().Add(dur)
+	return true, j.LeaseExpiresAt, nil
+}
+
+// ReclaimExpired releases leases whose deadline has passed, treating each one
+// exactly as an explicit failure would be treated.
+//
+// The scan walks only jobs currently out on lease, which is bounded by the
+// number of workers times their concurrency -- hundreds, typically -- not by
+// the size of the queue.
+func (s *Store) ReclaimExpired(now time.Time) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var reclaimed []string
+	for id := range s.leased {
+		j, ok := s.jobs[id]
+		if !ok || j.State != job.StateLeased {
+			delete(s.leased, id) // bookkeeping drift; nothing to reclaim
+			continue
+		}
+		if j.LeaseExpiresAt.After(now) {
+			continue
+		}
+		if _, err := s.failLocked(j, "lease expired", true, now); err != nil {
+			return reclaimed, err
+		}
+		reclaimed = append(reclaimed, id)
+	}
+	return reclaimed, nil
+}
+
+// ReplayJob returns a dead-lettered job to its queue with a fresh retry budget.
+func (s *Store) ReplayJob(jobID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	j, ok := s.jobs[jobID]
+	if !ok {
+		return ErrJobNotFound
+	}
+	if j.State != job.StateDeadLetter {
+		return ErrNotDeadLettered
+	}
+
+	now := time.Now().UTC()
+	e := &event{Type: eventReplayJob, JobID: jobID, EligibleAt: now}
+	payload, err := encodeEvent(e)
+	if err != nil {
+		return err
+	}
+	lsn, err := s.log.AppendSync(payload)
+	if err != nil {
+		return fmt.Errorf("broker: append replay: %w", err)
+	}
+	if err := s.apply(e); err != nil {
+		return err
+	}
+	s.lastLSN = lsn
+	s.index.push(j, now)
+	s.signal()
+	return nil
+}
+
+// ------------------------------------------------------------- queries ---
 
 // Get returns a job by ID.
 func (s *Store) Get(id string) (*job.Job, bool) {
@@ -197,6 +692,30 @@ func (s *Store) Get(id string) (*job.Job, bool) {
 	defer s.mu.RUnlock()
 	j, ok := s.jobs[id]
 	return j.Clone(), ok
+}
+
+// ListJobs returns jobs in a given state, newest first. A zero state matches
+// any state, an empty queue matches any queue, and a limit of zero means no
+// limit.
+func (s *Store) ListJobs(queue string, state job.State, limit int) []*job.Job {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var out []*job.Job
+	for _, j := range s.jobs {
+		if queue != "" && j.Queue != queue {
+			continue
+		}
+		if state != job.StateUnspecified && j.State != state {
+			continue
+		}
+		out = append(out, j.Clone())
+	}
+	sort.Slice(out, func(i, k int) bool { return out[i].ID > out[k].ID })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 // QueueStats holds per-queue job counts by state.
@@ -259,14 +778,26 @@ func (s *Store) Stats(queue string) Stats {
 	return out
 }
 
-// snapshot is the serialized form of the in-memory index. The idempotency map
-// is not stored: it is derived from the jobs on load, so the two cannot drift.
-type snapshot struct {
-	LastLSN uint64     `json:"last_lsn"`
-	Jobs    []*job.Job `json:"jobs"`
+// NextDelayedDeadline reports when the soonest delayed or retrying job becomes
+// eligible, so a caller can sleep until then rather than poll.
+func (s *Store) NextDelayedDeadline() (time.Time, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.index.nextDeadline()
 }
 
-// Snapshot durably records the current index and then drops the WAL segments it
+// ------------------------------------------------------------ snapshots ---
+
+// snapshot is the serialized form of the in-memory job set. The idempotency map
+// and schedule index are not stored: both are derived from the jobs on load, so
+// they cannot drift from them.
+type snapshot struct {
+	LastLSN      uint64     `json:"last_lsn"`
+	ReservedUpTo uint64     `json:"epoch_reserved_up_to"`
+	Jobs         []*job.Job `json:"jobs"`
+}
+
+// Snapshot durably records current state and then drops the WAL segments it
 // covers.
 //
 // Ordering matters: the snapshot must be fully on stable storage before any
@@ -274,7 +805,11 @@ type snapshot struct {
 // the records needed to rebuild what it replaced.
 func (s *Store) Snapshot() error {
 	s.mu.RLock()
-	snap := snapshot{LastLSN: s.lastLSN, Jobs: make([]*job.Job, 0, len(s.jobs))}
+	snap := snapshot{
+		LastLSN:      s.lastLSN,
+		ReservedUpTo: s.epochReservedUpTo,
+		Jobs:         make([]*job.Job, 0, len(s.jobs)),
+	}
 	for _, j := range s.jobs {
 		snap.Jobs = append(snap.Jobs, j)
 	}
@@ -320,8 +855,7 @@ func (s *Store) loadLatestSnapshot() (uint64, error) {
 	// Newest first, falling back to older ones: a snapshot truncated by a crash
 	// mid-write should cost us replay time, not the whole recovery.
 	for i := len(names) - 1; i >= 0; i-- {
-		path := filepath.Join(s.snapDir, names[i])
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(filepath.Join(s.snapDir, names[i]))
 		if err != nil {
 			continue
 		}
@@ -334,7 +868,11 @@ func (s *Store) loadLatestSnapshot() (uint64, error) {
 			if j.IdempotencyKey != "" {
 				s.idem[idemKey(j.Queue, j.IdempotencyKey)] = j.ID
 			}
+			if j.State == job.StateLeased {
+				s.leased[j.ID] = struct{}{}
+			}
 		}
+		s.epochReservedUpTo = snap.ReservedUpTo
 		return snap.LastLSN, nil
 	}
 	return 0, nil
@@ -362,6 +900,8 @@ func (s *Store) Close() error {
 	defer s.mu.Unlock()
 	return s.log.Close()
 }
+
+// --------------------------------------------------------------- helpers ---
 
 // listSnapshots returns snapshot filenames sorted oldest to newest.
 func listSnapshots(dir string) ([]string, error) {

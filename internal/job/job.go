@@ -35,6 +35,23 @@ const (
 	StateDeadLetter
 )
 
+// Leasable reports whether a job in this state may be handed to a worker once
+// its EligibleAt has passed.
+//
+// RetryWait is leasable for the same reason Pending is: it means "waiting to
+// run", and the wait is expressed by EligibleAt rather than by the state. Were
+// it otherwise, every retry would need a second logged transition just to move
+// back to Pending when its backoff elapsed -- a durable write per retry, buying
+// nothing.
+func (s State) Leasable() bool {
+	return s == StatePending || s == StateRetryWait
+}
+
+// Terminal reports whether a job has stopped moving on its own.
+func (s State) Terminal() bool {
+	return s == StateDone || s == StateDeadLetter
+}
+
 func (s State) String() string {
 	switch s {
 	case StatePending:

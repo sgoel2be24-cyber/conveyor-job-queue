@@ -25,6 +25,14 @@ service BrokerService {
   // Stats reports per-queue job counts by state.
   rpc Stats(StatsRequest) returns (StatsResponse);
 
+  // ListJobs returns jobs filtered by queue and state -- the dead-letter queue
+  // is just a state filter over this.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+
+  // ReplayJob returns a dead-lettered job to its queue with a fresh retry
+  // budget.
+  rpc ReplayJob(ReplayJobRequest) returns (ReplayJobResponse);
+
   // Lease streams job assignments to a worker as they become available for the
   // requested queue, up to max_in_flight concurrently-leased jobs at a time.
   rpc Lease(LeaseRequest) returns (stream LeaseResponse);
@@ -123,20 +131,42 @@ message StatsResponse {
   uint64 last_lsn = 3;
 }
 
+message ListJobsRequest {
+  string queue = 1;
+  JobState state = 2;
+  int32 limit = 3;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message ReplayJobRequest {
+  string job_id = 1;
+}
+
+message ReplayJobResponse {
+  bool replayed = 1;
+}
+
 message LeaseRequest {
   string queue = 1;
   string worker_id = 2;
   int32 max_in_flight = 3;
+  // lease_duration_ms is how long the worker asks to hold each job before the
+  // broker may reclaim it. The worker renews via Heartbeat while it works.
+  int64 lease_duration_ms = 4;
 }
 
 message LeaseResponse {
   string job_id = 1;
   uint64 epoch = 2;
-  string idempotency_key = 3;
-  string handler = 4;
-  bytes payload = 5;
-  int32 attempt = 6;
-  int64 lease_expires_at_unix_ms = 7;
+  string queue = 3;
+  string idempotency_key = 4;
+  string handler = 5;
+  bytes payload = 6;
+  int32 attempt = 7;
+  int64 lease_expires_at_unix_ms = 8;
 }
 
 message AckRequest {
@@ -168,6 +198,8 @@ message HeartbeatRequest {
   string job_id = 1;
   uint64 epoch = 2;
   string worker_id = 3;
+  // lease_duration_ms is the extension being requested, clamped by the broker.
+  int64 lease_duration_ms = 4;
 }
 
 message HeartbeatResponse {

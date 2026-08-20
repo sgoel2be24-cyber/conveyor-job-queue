@@ -719,18 +719,213 @@ func (x *StatsResponse) GetLastLsn() uint64 {
 	return 0
 }
 
-type LeaseRequest struct {
+type ListJobsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
-	WorkerId      string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	MaxInFlight   int32                  `protobuf:"varint,3,opt,name=max_in_flight,json=maxInFlight,proto3" json:"max_in_flight,omitempty"`
+	State         JobState               `protobuf:"varint,2,opt,name=state,proto3,enum=conveyor.v1.JobState" json:"state,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *ListJobsRequest) Reset() {
+	*x = ListJobsRequest{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsRequest) ProtoMessage() {}
+
+func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
+func (*ListJobsRequest) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListJobsRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *ListJobsRequest) GetState() JobState {
+	if x != nil {
+		return x.State
+	}
+	return JobState_JOB_STATE_UNSPECIFIED
+}
+
+func (x *ListJobsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListJobsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListJobsResponse) Reset() {
+	*x = ListJobsResponse{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListJobsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListJobsResponse) ProtoMessage() {}
+
+func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
+func (*ListJobsResponse) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListJobsResponse) GetJobs() []*Job {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
+type ReplayJobRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayJobRequest) Reset() {
+	*x = ReplayJobRequest{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayJobRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayJobRequest) ProtoMessage() {}
+
+func (x *ReplayJobRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayJobRequest.ProtoReflect.Descriptor instead.
+func (*ReplayJobRequest) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ReplayJobRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+type ReplayJobResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Replayed      bool                   `protobuf:"varint,1,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayJobResponse) Reset() {
+	*x = ReplayJobResponse{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayJobResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayJobResponse) ProtoMessage() {}
+
+func (x *ReplayJobResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayJobResponse.ProtoReflect.Descriptor instead.
+func (*ReplayJobResponse) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ReplayJobResponse) GetReplayed() bool {
+	if x != nil {
+		return x.Replayed
+	}
+	return false
+}
+
+type LeaseRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Queue       string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	WorkerId    string                 `protobuf:"bytes,2,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	MaxInFlight int32                  `protobuf:"varint,3,opt,name=max_in_flight,json=maxInFlight,proto3" json:"max_in_flight,omitempty"`
+	// lease_duration_ms is how long the worker asks to hold each job before the
+	// broker may reclaim it. The worker renews via Heartbeat while it works.
+	LeaseDurationMs int64 `protobuf:"varint,4,opt,name=lease_duration_ms,json=leaseDurationMs,proto3" json:"lease_duration_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
 func (x *LeaseRequest) Reset() {
 	*x = LeaseRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +937,7 @@ func (x *LeaseRequest) String() string {
 func (*LeaseRequest) ProtoMessage() {}
 
 func (x *LeaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +950,7 @@ func (x *LeaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseRequest.ProtoReflect.Descriptor instead.
 func (*LeaseRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{8}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LeaseRequest) GetQueue() string {
@@ -779,22 +974,30 @@ func (x *LeaseRequest) GetMaxInFlight() int32 {
 	return 0
 }
 
+func (x *LeaseRequest) GetLeaseDurationMs() int64 {
+	if x != nil {
+		return x.LeaseDurationMs
+	}
+	return 0
+}
+
 type LeaseResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	JobId                string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	Epoch                uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	IdempotencyKey       string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	Handler              string                 `protobuf:"bytes,4,opt,name=handler,proto3" json:"handler,omitempty"`
-	Payload              []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
-	Attempt              int32                  `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	LeaseExpiresAtUnixMs int64                  `protobuf:"varint,7,opt,name=lease_expires_at_unix_ms,json=leaseExpiresAtUnixMs,proto3" json:"lease_expires_at_unix_ms,omitempty"`
+	Queue                string                 `protobuf:"bytes,3,opt,name=queue,proto3" json:"queue,omitempty"`
+	IdempotencyKey       string                 `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Handler              string                 `protobuf:"bytes,5,opt,name=handler,proto3" json:"handler,omitempty"`
+	Payload              []byte                 `protobuf:"bytes,6,opt,name=payload,proto3" json:"payload,omitempty"`
+	Attempt              int32                  `protobuf:"varint,7,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	LeaseExpiresAtUnixMs int64                  `protobuf:"varint,8,opt,name=lease_expires_at_unix_ms,json=leaseExpiresAtUnixMs,proto3" json:"lease_expires_at_unix_ms,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *LeaseResponse) Reset() {
 	*x = LeaseResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -806,7 +1009,7 @@ func (x *LeaseResponse) String() string {
 func (*LeaseResponse) ProtoMessage() {}
 
 func (x *LeaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -819,7 +1022,7 @@ func (x *LeaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseResponse.ProtoReflect.Descriptor instead.
 func (*LeaseResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{9}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LeaseResponse) GetJobId() string {
@@ -834,6 +1037,13 @@ func (x *LeaseResponse) GetEpoch() uint64 {
 		return x.Epoch
 	}
 	return 0
+}
+
+func (x *LeaseResponse) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
 }
 
 func (x *LeaseResponse) GetIdempotencyKey() string {
@@ -882,7 +1092,7 @@ type AckRequest struct {
 
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -894,7 +1104,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -907,7 +1117,7 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{10}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AckRequest) GetJobId() string {
@@ -943,7 +1153,7 @@ type AckResponse struct {
 
 func (x *AckResponse) Reset() {
 	*x = AckResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -955,7 +1165,7 @@ func (x *AckResponse) String() string {
 func (*AckResponse) ProtoMessage() {}
 
 func (x *AckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -968,7 +1178,7 @@ func (x *AckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckResponse.ProtoReflect.Descriptor instead.
 func (*AckResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{11}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AckResponse) GetAccepted() bool {
@@ -990,7 +1200,7 @@ type NackRequest struct {
 
 func (x *NackRequest) Reset() {
 	*x = NackRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1002,7 +1212,7 @@ func (x *NackRequest) String() string {
 func (*NackRequest) ProtoMessage() {}
 
 func (x *NackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1225,7 @@ func (x *NackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
 func (*NackRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{12}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *NackRequest) GetJobId() string {
@@ -1056,7 +1266,7 @@ type NackResponse struct {
 
 func (x *NackResponse) Reset() {
 	*x = NackResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1068,7 +1278,7 @@ func (x *NackResponse) String() string {
 func (*NackResponse) ProtoMessage() {}
 
 func (x *NackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1081,7 +1291,7 @@ func (x *NackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackResponse.ProtoReflect.Descriptor instead.
 func (*NackResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{13}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *NackResponse) GetAccepted() bool {
@@ -1099,17 +1309,19 @@ func (x *NackResponse) GetDeadLettered() bool {
 }
 
 type HeartbeatRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Epoch         uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	WorkerId      string                 `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	JobId    string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	Epoch    uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	WorkerId string                 `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
+	// lease_duration_ms is the extension being requested, clamped by the broker.
+	LeaseDurationMs int64 `protobuf:"varint,4,opt,name=lease_duration_ms,json=leaseDurationMs,proto3" json:"lease_duration_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1121,7 +1333,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1134,7 +1346,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{14}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HeartbeatRequest) GetJobId() string {
@@ -1158,6 +1370,13 @@ func (x *HeartbeatRequest) GetWorkerId() string {
 	return ""
 }
 
+func (x *HeartbeatRequest) GetLeaseDurationMs() int64 {
+	if x != nil {
+		return x.LeaseDurationMs
+	}
+	return 0
+}
+
 type HeartbeatResponse struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Accepted                bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
@@ -1168,7 +1387,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1180,7 +1399,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1193,7 +1412,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{15}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *HeartbeatResponse) GetAccepted() bool {
@@ -1268,19 +1487,31 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\x06queues\x18\x01 \x03(\v2\x17.conveyor.v1.QueueStatsR\x06queues\x12\x1d\n" +
 	"\n" +
 	"total_jobs\x18\x02 \x01(\x03R\ttotalJobs\x12\x19\n" +
-	"\blast_lsn\x18\x03 \x01(\x04R\alastLsn\"e\n" +
+	"\blast_lsn\x18\x03 \x01(\x04R\alastLsn\"j\n" +
+	"\x0fListJobsRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12+\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x15.conveyor.v1.JobStateR\x05state\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"8\n" +
+	"\x10ListJobsResponse\x12$\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x10.conveyor.v1.JobR\x04jobs\")\n" +
+	"\x10ReplayJobRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"/\n" +
+	"\x11ReplayJobResponse\x12\x1a\n" +
+	"\breplayed\x18\x01 \x01(\bR\breplayed\"\x91\x01\n" +
 	"\fLeaseRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\"\n" +
-	"\rmax_in_flight\x18\x03 \x01(\x05R\vmaxInFlight\"\xeb\x01\n" +
+	"\rmax_in_flight\x18\x03 \x01(\x05R\vmaxInFlight\x12*\n" +
+	"\x11lease_duration_ms\x18\x04 \x01(\x03R\x0fleaseDurationMs\"\x81\x02\n" +
 	"\rLeaseResponse\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
-	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12'\n" +
-	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12\x18\n" +
-	"\ahandler\x18\x04 \x01(\tR\ahandler\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\x12\x18\n" +
-	"\aattempt\x18\x06 \x01(\x05R\aattempt\x126\n" +
-	"\x18lease_expires_at_unix_ms\x18\a \x01(\x03R\x14leaseExpiresAtUnixMs\"V\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x14\n" +
+	"\x05queue\x18\x03 \x01(\tR\x05queue\x12'\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x12\x18\n" +
+	"\ahandler\x18\x05 \x01(\tR\ahandler\x12\x18\n" +
+	"\apayload\x18\x06 \x01(\fR\apayload\x12\x18\n" +
+	"\aattempt\x18\a \x01(\x05R\aattempt\x126\n" +
+	"\x18lease_expires_at_unix_ms\x18\b \x01(\x03R\x14leaseExpiresAtUnixMs\"V\n" +
 	"\n" +
 	"AckRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
@@ -1295,11 +1526,12 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"O\n" +
 	"\fNackResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
-	"\rdead_lettered\x18\x02 \x01(\bR\fdeadLettered\"\\\n" +
+	"\rdead_lettered\x18\x02 \x01(\bR\fdeadLettered\"\x88\x01\n" +
 	"\x10HeartbeatRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x1b\n" +
-	"\tworker_id\x18\x03 \x01(\tR\bworkerId\"n\n" +
+	"\tworker_id\x18\x03 \x01(\tR\bworkerId\x12*\n" +
+	"\x11lease_duration_ms\x18\x04 \x01(\x03R\x0fleaseDurationMs\"n\n" +
 	"\x11HeartbeatResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12=\n" +
 	"\x1cnew_lease_expires_at_unix_ms\x18\x02 \x01(\x03R\x17newLeaseExpiresAtUnixMs*^\n" +
@@ -1314,11 +1546,13 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\x10JOB_STATE_LEASED\x10\x02\x12\x18\n" +
 	"\x14JOB_STATE_RETRY_WAIT\x10\x03\x12\x12\n" +
 	"\x0eJOB_STATE_DONE\x10\x04\x12\x19\n" +
-	"\x15JOB_STATE_DEAD_LETTER\x10\x052\xd1\x03\n" +
+	"\x15JOB_STATE_DEAD_LETTER\x10\x052\xe6\x04\n" +
 	"\rBrokerService\x12A\n" +
 	"\x06Submit\x12\x1a.conveyor.v1.SubmitRequest\x1a\x1b.conveyor.v1.SubmitResponse\x128\n" +
 	"\x03Get\x12\x17.conveyor.v1.GetRequest\x1a\x18.conveyor.v1.GetResponse\x12>\n" +
-	"\x05Stats\x12\x19.conveyor.v1.StatsRequest\x1a\x1a.conveyor.v1.StatsResponse\x12@\n" +
+	"\x05Stats\x12\x19.conveyor.v1.StatsRequest\x1a\x1a.conveyor.v1.StatsResponse\x12G\n" +
+	"\bListJobs\x12\x1c.conveyor.v1.ListJobsRequest\x1a\x1d.conveyor.v1.ListJobsResponse\x12J\n" +
+	"\tReplayJob\x12\x1d.conveyor.v1.ReplayJobRequest\x1a\x1e.conveyor.v1.ReplayJobResponse\x12@\n" +
 	"\x05Lease\x12\x19.conveyor.v1.LeaseRequest\x1a\x1a.conveyor.v1.LeaseResponse0\x01\x128\n" +
 	"\x03Ack\x12\x17.conveyor.v1.AckRequest\x1a\x18.conveyor.v1.AckResponse\x12;\n" +
 	"\x04Nack\x12\x18.conveyor.v1.NackRequest\x1a\x19.conveyor.v1.NackResponse\x12J\n" +
@@ -1337,7 +1571,7 @@ func file_conveyor_v1_queue_proto_rawDescGZIP() []byte {
 }
 
 var file_conveyor_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_conveyor_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_conveyor_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_conveyor_v1_queue_proto_goTypes = []any{
 	(Priority)(0),             // 0: conveyor.v1.Priority
 	(JobState)(0),             // 1: conveyor.v1.JobState
@@ -1349,14 +1583,18 @@ var file_conveyor_v1_queue_proto_goTypes = []any{
 	(*StatsRequest)(nil),      // 7: conveyor.v1.StatsRequest
 	(*QueueStats)(nil),        // 8: conveyor.v1.QueueStats
 	(*StatsResponse)(nil),     // 9: conveyor.v1.StatsResponse
-	(*LeaseRequest)(nil),      // 10: conveyor.v1.LeaseRequest
-	(*LeaseResponse)(nil),     // 11: conveyor.v1.LeaseResponse
-	(*AckRequest)(nil),        // 12: conveyor.v1.AckRequest
-	(*AckResponse)(nil),       // 13: conveyor.v1.AckResponse
-	(*NackRequest)(nil),       // 14: conveyor.v1.NackRequest
-	(*NackResponse)(nil),      // 15: conveyor.v1.NackResponse
-	(*HeartbeatRequest)(nil),  // 16: conveyor.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 17: conveyor.v1.HeartbeatResponse
+	(*ListJobsRequest)(nil),   // 10: conveyor.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),  // 11: conveyor.v1.ListJobsResponse
+	(*ReplayJobRequest)(nil),  // 12: conveyor.v1.ReplayJobRequest
+	(*ReplayJobResponse)(nil), // 13: conveyor.v1.ReplayJobResponse
+	(*LeaseRequest)(nil),      // 14: conveyor.v1.LeaseRequest
+	(*LeaseResponse)(nil),     // 15: conveyor.v1.LeaseResponse
+	(*AckRequest)(nil),        // 16: conveyor.v1.AckRequest
+	(*AckResponse)(nil),       // 17: conveyor.v1.AckResponse
+	(*NackRequest)(nil),       // 18: conveyor.v1.NackRequest
+	(*NackResponse)(nil),      // 19: conveyor.v1.NackResponse
+	(*HeartbeatRequest)(nil),  // 20: conveyor.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil), // 21: conveyor.v1.HeartbeatResponse
 }
 var file_conveyor_v1_queue_proto_depIdxs = []int32{
 	0,  // 0: conveyor.v1.Job.priority:type_name -> conveyor.v1.Priority
@@ -1364,25 +1602,31 @@ var file_conveyor_v1_queue_proto_depIdxs = []int32{
 	0,  // 2: conveyor.v1.SubmitRequest.priority:type_name -> conveyor.v1.Priority
 	2,  // 3: conveyor.v1.GetResponse.job:type_name -> conveyor.v1.Job
 	8,  // 4: conveyor.v1.StatsResponse.queues:type_name -> conveyor.v1.QueueStats
-	3,  // 5: conveyor.v1.BrokerService.Submit:input_type -> conveyor.v1.SubmitRequest
-	5,  // 6: conveyor.v1.BrokerService.Get:input_type -> conveyor.v1.GetRequest
-	7,  // 7: conveyor.v1.BrokerService.Stats:input_type -> conveyor.v1.StatsRequest
-	10, // 8: conveyor.v1.BrokerService.Lease:input_type -> conveyor.v1.LeaseRequest
-	12, // 9: conveyor.v1.BrokerService.Ack:input_type -> conveyor.v1.AckRequest
-	14, // 10: conveyor.v1.BrokerService.Nack:input_type -> conveyor.v1.NackRequest
-	16, // 11: conveyor.v1.BrokerService.Heartbeat:input_type -> conveyor.v1.HeartbeatRequest
-	4,  // 12: conveyor.v1.BrokerService.Submit:output_type -> conveyor.v1.SubmitResponse
-	6,  // 13: conveyor.v1.BrokerService.Get:output_type -> conveyor.v1.GetResponse
-	9,  // 14: conveyor.v1.BrokerService.Stats:output_type -> conveyor.v1.StatsResponse
-	11, // 15: conveyor.v1.BrokerService.Lease:output_type -> conveyor.v1.LeaseResponse
-	13, // 16: conveyor.v1.BrokerService.Ack:output_type -> conveyor.v1.AckResponse
-	15, // 17: conveyor.v1.BrokerService.Nack:output_type -> conveyor.v1.NackResponse
-	17, // 18: conveyor.v1.BrokerService.Heartbeat:output_type -> conveyor.v1.HeartbeatResponse
-	12, // [12:19] is the sub-list for method output_type
-	5,  // [5:12] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	1,  // 5: conveyor.v1.ListJobsRequest.state:type_name -> conveyor.v1.JobState
+	2,  // 6: conveyor.v1.ListJobsResponse.jobs:type_name -> conveyor.v1.Job
+	3,  // 7: conveyor.v1.BrokerService.Submit:input_type -> conveyor.v1.SubmitRequest
+	5,  // 8: conveyor.v1.BrokerService.Get:input_type -> conveyor.v1.GetRequest
+	7,  // 9: conveyor.v1.BrokerService.Stats:input_type -> conveyor.v1.StatsRequest
+	10, // 10: conveyor.v1.BrokerService.ListJobs:input_type -> conveyor.v1.ListJobsRequest
+	12, // 11: conveyor.v1.BrokerService.ReplayJob:input_type -> conveyor.v1.ReplayJobRequest
+	14, // 12: conveyor.v1.BrokerService.Lease:input_type -> conveyor.v1.LeaseRequest
+	16, // 13: conveyor.v1.BrokerService.Ack:input_type -> conveyor.v1.AckRequest
+	18, // 14: conveyor.v1.BrokerService.Nack:input_type -> conveyor.v1.NackRequest
+	20, // 15: conveyor.v1.BrokerService.Heartbeat:input_type -> conveyor.v1.HeartbeatRequest
+	4,  // 16: conveyor.v1.BrokerService.Submit:output_type -> conveyor.v1.SubmitResponse
+	6,  // 17: conveyor.v1.BrokerService.Get:output_type -> conveyor.v1.GetResponse
+	9,  // 18: conveyor.v1.BrokerService.Stats:output_type -> conveyor.v1.StatsResponse
+	11, // 19: conveyor.v1.BrokerService.ListJobs:output_type -> conveyor.v1.ListJobsResponse
+	13, // 20: conveyor.v1.BrokerService.ReplayJob:output_type -> conveyor.v1.ReplayJobResponse
+	15, // 21: conveyor.v1.BrokerService.Lease:output_type -> conveyor.v1.LeaseResponse
+	17, // 22: conveyor.v1.BrokerService.Ack:output_type -> conveyor.v1.AckResponse
+	19, // 23: conveyor.v1.BrokerService.Nack:output_type -> conveyor.v1.NackResponse
+	21, // 24: conveyor.v1.BrokerService.Heartbeat:output_type -> conveyor.v1.HeartbeatResponse
+	16, // [16:25] is the sub-list for method output_type
+	7,  // [7:16] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_conveyor_v1_queue_proto_init() }
@@ -1396,7 +1640,7 @@ func file_conveyor_v1_queue_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_conveyor_v1_queue_proto_rawDesc), len(file_conveyor_v1_queue_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

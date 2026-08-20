@@ -92,6 +92,45 @@ poison-pill payload (or a handler bug) loops
 `Pending → Leased → timeout → Pending` forever and never reaches the DLQ —
 a real liveness bug and a stuck-queue resource leak, not a hypothetical.
 
+## What is flushed, and what is not
+
+Not every record needs to reach stable storage before the system moves on. The
+rule is: **flush what a caller is waiting on, or what cannot be reconstructed.**
+
+| Record | Flushed? | Why |
+| --- | --- | --- |
+| Submit | yes | The producer is being promised durability. This is the promise. |
+| Ack | yes | Losing it re-runs completed work. Permitted, but worth avoiding. |
+| Fail (nack / reclaim) | yes | Carries the jittered retry schedule, which cannot be recomputed. |
+| Epoch reservation | yes | Fencing is unsound if tokens can repeat. Once per million tokens. |
+| **Lease** | **no** | Losing it costs nothing — see below. |
+| **Heartbeat** | **not even logged** | Lease expiry is not durable state at all. |
+
+A lost lease record is harmless because recovery releases *every* outstanding
+lease anyway: a worker holding one is by definition talking to a process that no
+longer exists, so the job becomes available again — which is exactly what
+at-least-once delivery already permits. Since writes to a file are ordered, the
+flush performed by a later Ack or Fail also makes any lease records before it
+durable, for free.
+
+This matters because leases are the most frequent write in the system. Flushing
+each one would cap the broker at a few hundred leases per second (see the
+`F_FULLFSYNC` cost above).
+
+### Fencing tokens without a flush per lease
+
+Fencing only works if a token is never issued twice. The obvious way to
+guarantee that is to flush every lease — the thing we just declined to do.
+
+Instead the broker logs, once, that every token up to some ceiling *may* be
+issued, then hands them out from that block for free. Recovery resumes strictly
+above the last recorded ceiling, so a token issued before a crash can never be
+issued again — including tokens whose lease records never reached the disk. One
+flush per block (a million tokens by default) rather than one per lease.
+
+This is the same trick as a HiLo key allocator, and the same reason Raft
+persists its term: cheap monotonicity across restarts.
+
 ## Delivery semantics: idempotency keys vs. fencing tokens
 
 Two mechanisms, easy to conflate, protecting different seams — the system
@@ -118,6 +157,20 @@ forwards the idempotency key as a request header so a well-behaved receiver
 can dedup; the shell-exec handler uses `exec.CommandContext` so lease-expiry
 cancellation gives a best-effort abort (best-effort only — it cannot help
 once a webhook request is already in flight server-side).
+
+### Workers usually fail themselves before the broker does
+
+A worker ties each job's context to its lease deadline, so when a lease runs
+out the worker cancels its own handler and reports the failure itself. The
+broker's reclaim sweep is therefore the *second* line of defense, not the
+first, and it only comes into play when a worker genuinely stops responding —
+killed, hung, or partitioned.
+
+This was discovered while writing the end-to-end test for reclaim: the first
+version of the test never reached the reclaim path at all, because the worker
+kept beating the broker to it. Exercising reclaim requires a worker that
+ignores its own cancellation, which is what
+`TestEndToEndZombieWorkerLosesJobAndIsFenced` simulates.
 
 ## RPC contract
 
@@ -149,10 +202,16 @@ Measured on Apple M5 / macOS 26.6 / APFS. Full tables in the
    drive. Amortizing one flush over 512 records drops the per-record cost to
    10.6 µs — a 357× gain for a bounded latency window. Wiring this into the
    submit path is Phase 3.
-4. **Zombie-worker fencing test.** ⏳ Phase 2. A deliberate test that delays a
-   worker's `Ack` past its lease expiry via a test hook, asserting the
-   broker's epoch check rejects the stale `Ack` rather than corrupting job
-   state.
+4. **Zombie-worker fencing test.** ✅ Covered at two levels. In-process unit
+   tests (`lease_test.go`) drive the exact race — reclaim a lease, then have
+   the original holder Ack/Nack/Heartbeat — and assert each is refused. An
+   end-to-end test runs it over the real RPC stack with a genuinely wedged
+   worker. Both were verified by mutation: dropping the state check from
+   `holdsLease` makes the fencing test fail, and exempting timeouts from the
+   retry counter makes the liveness test fail.
+5. **Worker-crash handoff.** ✅ `scripts/worker_crash_demo.sh` — `kill -9` a
+   worker mid-job; the lease expires, the broker reclaims it (bumping the
+   fencing token from 1 to 2), and a second worker completes it.
 
 ## Build phases
 
@@ -162,11 +221,14 @@ Measured on Apple M5 / macOS 26.6 / APFS. Full tables in the
       idempotency keys, `broker start` / `submit` / `status` / `get`.
       Acceptance bar met: torn-tail tests at every byte offset, plus 50 real
       `kill -9` trials with zero acknowledged jobs lost.
-- [ ] **Phase 2** — Connect RPC `Lease`/`Ack`/`Nack`/`Heartbeat` with
-      fencing, worker pool, lease timeout + heartbeat renewal, retry+backoff
-      into the unified counter, DLQ, shell-exec handler (+ webhook handler).
-- [ ] **Phase 3** — Prometheus metrics, `status`/`dlq list`/`dlq replay`, the
-      three benchmark deliverables above, README with real measured numbers.
+- [x] **Phase 2** — Connect RPC `Lease` (streaming) / `Ack` / `Nack` /
+      `Heartbeat` with fencing tokens, dispatcher with per-queue
+      priority+delay scheduling, worker pool with bounded concurrency and
+      heartbeat renewal, lease-timeout reclaim through the unified retry
+      counter, exponential backoff with equal jitter, dead-letter queue with
+      `dlq list` / `dlq replay`, and shell + webhook handlers.
+- [ ] **Phase 3** — Prometheus metrics, group commit on the submit path, the
+      `bench` subcommand, README with the resulting numbers.
 - [ ] **Phase 4 (stretch)** — broker HA via `hashicorp/raft`-backed leader
       election, WAL replication, automatic failover.
 - [ ] **Phase 5 (stretch)** — chaos harness: random `SIGKILL` of

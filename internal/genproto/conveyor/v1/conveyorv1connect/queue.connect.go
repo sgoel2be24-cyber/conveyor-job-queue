@@ -39,6 +39,10 @@ const (
 	BrokerServiceGetProcedure = "/conveyor.v1.BrokerService/Get"
 	// BrokerServiceStatsProcedure is the fully-qualified name of the BrokerService's Stats RPC.
 	BrokerServiceStatsProcedure = "/conveyor.v1.BrokerService/Stats"
+	// BrokerServiceListJobsProcedure is the fully-qualified name of the BrokerService's ListJobs RPC.
+	BrokerServiceListJobsProcedure = "/conveyor.v1.BrokerService/ListJobs"
+	// BrokerServiceReplayJobProcedure is the fully-qualified name of the BrokerService's ReplayJob RPC.
+	BrokerServiceReplayJobProcedure = "/conveyor.v1.BrokerService/ReplayJob"
 	// BrokerServiceLeaseProcedure is the fully-qualified name of the BrokerService's Lease RPC.
 	BrokerServiceLeaseProcedure = "/conveyor.v1.BrokerService/Lease"
 	// BrokerServiceAckProcedure is the fully-qualified name of the BrokerService's Ack RPC.
@@ -59,6 +63,12 @@ type BrokerServiceClient interface {
 	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
 	// Stats reports per-queue job counts by state.
 	Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error)
+	// ListJobs returns jobs filtered by queue and state -- the dead-letter queue
+	// is just a state filter over this.
+	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
+	// ReplayJob returns a dead-lettered job to its queue with a fresh retry
+	// budget.
+	ReplayJob(context.Context, *connect.Request[v1.ReplayJobRequest]) (*connect.Response[v1.ReplayJobResponse], error)
 	// Lease streams job assignments to a worker as they become available for the
 	// requested queue, up to max_in_flight concurrently-leased jobs at a time.
 	Lease(context.Context, *connect.Request[v1.LeaseRequest]) (*connect.ServerStreamForClient[v1.LeaseResponse], error)
@@ -102,6 +112,18 @@ func NewBrokerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(brokerServiceMethods.ByName("Stats")),
 			connect.WithClientOptions(opts...),
 		),
+		listJobs: connect.NewClient[v1.ListJobsRequest, v1.ListJobsResponse](
+			httpClient,
+			baseURL+BrokerServiceListJobsProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("ListJobs")),
+			connect.WithClientOptions(opts...),
+		),
+		replayJob: connect.NewClient[v1.ReplayJobRequest, v1.ReplayJobResponse](
+			httpClient,
+			baseURL+BrokerServiceReplayJobProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("ReplayJob")),
+			connect.WithClientOptions(opts...),
+		),
 		lease: connect.NewClient[v1.LeaseRequest, v1.LeaseResponse](
 			httpClient,
 			baseURL+BrokerServiceLeaseProcedure,
@@ -134,6 +156,8 @@ type brokerServiceClient struct {
 	submit    *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
 	get       *connect.Client[v1.GetRequest, v1.GetResponse]
 	stats     *connect.Client[v1.StatsRequest, v1.StatsResponse]
+	listJobs  *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	replayJob *connect.Client[v1.ReplayJobRequest, v1.ReplayJobResponse]
 	lease     *connect.Client[v1.LeaseRequest, v1.LeaseResponse]
 	ack       *connect.Client[v1.AckRequest, v1.AckResponse]
 	nack      *connect.Client[v1.NackRequest, v1.NackResponse]
@@ -153,6 +177,16 @@ func (c *brokerServiceClient) Get(ctx context.Context, req *connect.Request[v1.G
 // Stats calls conveyor.v1.BrokerService.Stats.
 func (c *brokerServiceClient) Stats(ctx context.Context, req *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error) {
 	return c.stats.CallUnary(ctx, req)
+}
+
+// ListJobs calls conveyor.v1.BrokerService.ListJobs.
+func (c *brokerServiceClient) ListJobs(ctx context.Context, req *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
+	return c.listJobs.CallUnary(ctx, req)
+}
+
+// ReplayJob calls conveyor.v1.BrokerService.ReplayJob.
+func (c *brokerServiceClient) ReplayJob(ctx context.Context, req *connect.Request[v1.ReplayJobRequest]) (*connect.Response[v1.ReplayJobResponse], error) {
+	return c.replayJob.CallUnary(ctx, req)
 }
 
 // Lease calls conveyor.v1.BrokerService.Lease.
@@ -185,6 +219,12 @@ type BrokerServiceHandler interface {
 	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
 	// Stats reports per-queue job counts by state.
 	Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error)
+	// ListJobs returns jobs filtered by queue and state -- the dead-letter queue
+	// is just a state filter over this.
+	ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error)
+	// ReplayJob returns a dead-lettered job to its queue with a fresh retry
+	// budget.
+	ReplayJob(context.Context, *connect.Request[v1.ReplayJobRequest]) (*connect.Response[v1.ReplayJobResponse], error)
 	// Lease streams job assignments to a worker as they become available for the
 	// requested queue, up to max_in_flight concurrently-leased jobs at a time.
 	Lease(context.Context, *connect.Request[v1.LeaseRequest], *connect.ServerStream[v1.LeaseResponse]) error
@@ -224,6 +264,18 @@ func NewBrokerServiceHandler(svc BrokerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(brokerServiceMethods.ByName("Stats")),
 		connect.WithHandlerOptions(opts...),
 	)
+	brokerServiceListJobsHandler := connect.NewUnaryHandler(
+		BrokerServiceListJobsProcedure,
+		svc.ListJobs,
+		connect.WithSchema(brokerServiceMethods.ByName("ListJobs")),
+		connect.WithHandlerOptions(opts...),
+	)
+	brokerServiceReplayJobHandler := connect.NewUnaryHandler(
+		BrokerServiceReplayJobProcedure,
+		svc.ReplayJob,
+		connect.WithSchema(brokerServiceMethods.ByName("ReplayJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	brokerServiceLeaseHandler := connect.NewServerStreamHandler(
 		BrokerServiceLeaseProcedure,
 		svc.Lease,
@@ -256,6 +308,10 @@ func NewBrokerServiceHandler(svc BrokerServiceHandler, opts ...connect.HandlerOp
 			brokerServiceGetHandler.ServeHTTP(w, r)
 		case BrokerServiceStatsProcedure:
 			brokerServiceStatsHandler.ServeHTTP(w, r)
+		case BrokerServiceListJobsProcedure:
+			brokerServiceListJobsHandler.ServeHTTP(w, r)
+		case BrokerServiceReplayJobProcedure:
+			brokerServiceReplayJobHandler.ServeHTTP(w, r)
 		case BrokerServiceLeaseProcedure:
 			brokerServiceLeaseHandler.ServeHTTP(w, r)
 		case BrokerServiceAckProcedure:
@@ -283,6 +339,14 @@ func (UnimplementedBrokerServiceHandler) Get(context.Context, *connect.Request[v
 
 func (UnimplementedBrokerServiceHandler) Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Stats is not implemented"))
+}
+
+func (UnimplementedBrokerServiceHandler) ListJobs(context.Context, *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.ListJobs is not implemented"))
+}
+
+func (UnimplementedBrokerServiceHandler) ReplayJob(context.Context, *connect.Request[v1.ReplayJobRequest]) (*connect.Response[v1.ReplayJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.ReplayJob is not implemented"))
 }
 
 func (UnimplementedBrokerServiceHandler) Lease(context.Context, *connect.Request[v1.LeaseRequest], *connect.ServerStream[v1.LeaseResponse]) error {
