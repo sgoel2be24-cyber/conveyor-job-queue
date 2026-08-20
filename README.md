@@ -199,7 +199,7 @@ survive, the partial one is discarded, and the log is immediately writable
 again.
 
 The two invariants the whole design rests on were verified by mutation — the
-test is only worth having if reintroducing the bug makes it fail:
+test is only worth having if reintroducing of the bug makes it fail:
 
 | Bug reintroduced | Test that caught it |
 | --- | --- |
