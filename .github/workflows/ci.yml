@@ -32,6 +32,12 @@ jobs:
       # bugs it catches are exactly the ones that pass a casual test run.
       - run: go test -race ./...
 
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      # Installed with `go install` rather than golangci-lint-action, so the
+      # linter is built by the same toolchain as the module it inspects.
+      # golangci-lint refuses to run when it was built with an older Go than
+      # the target's `go` directive, which is exactly what the prebuilt binaries
+      # hit here. Pinned so a new release cannot change the result of a rerun.
+      - name: Lint
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
+          "$(go env GOPATH)/bin/golangci-lint" run ./...

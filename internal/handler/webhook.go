@@ -93,7 +93,7 @@ func (h *Webhook) Execute(ctx context.Context, j Job) error {
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, spec.URL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxCapturedBody))

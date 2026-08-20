@@ -131,7 +131,7 @@ func Open(cfg Config) (*Store, error) {
 
 	snapLSN, err := s.loadLatestSnapshot()
 	if err != nil {
-		log.Close()
+		_ = log.Close()
 		return nil, err
 	}
 	s.lastLSN = snapLSN
@@ -148,7 +148,7 @@ func Open(cfg Config) (*Store, error) {
 		return nil
 	})
 	if err != nil {
-		log.Close()
+		_ = log.Close()
 		return nil, fmt.Errorf("broker: replay: %w", err)
 	}
 
@@ -941,11 +941,11 @@ func writeFileSync(path string, data []byte) error {
 		return fmt.Errorf("broker: create %s: %w", path, err)
 	}
 	if _, err := f.Write(data); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("broker: write %s: %w", path, err)
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("broker: sync %s: %w", path, err)
 	}
 	return f.Close()
@@ -956,7 +956,7 @@ func syncDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return f.Sync()
 }
 

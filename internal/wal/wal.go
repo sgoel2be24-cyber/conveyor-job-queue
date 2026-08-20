@@ -135,29 +135,29 @@ func Open(opts Options) (*WAL, error) {
 
 	validEnd, count, err := scanRecords(f, nil)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("wal: scan segment %s: %w", path, err)
 	}
 
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	if info.Size() > validEnd {
 		// Discard the partial record a crash left behind, so the next append
 		// does not land beyond a gap that replay would stop at.
 		if err := f.Truncate(validEnd); err != nil {
-			f.Close()
+			_ = f.Close()
 			return nil, fmt.Errorf("wal: truncate torn tail: %w", err)
 		}
 		if err := fullSync(f); err != nil {
-			f.Close()
+			_ = f.Close()
 			return nil, fmt.Errorf("wal: sync after truncate: %w", err)
 		}
 	}
 	if _, err := f.Seek(validEnd, io.SeekStart); err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 
@@ -257,7 +257,7 @@ func (w *WAL) createSegment(base uint64) error {
 	// a crash could otherwise leave records written to a file that does not
 	// appear in the directory after reboot.
 	if err := syncDir(w.dir); err != nil {
-		f.Close()
+		_ = f.Close()
 		return fmt.Errorf("wal: sync dir: %w", err)
 	}
 	w.active = f
@@ -313,7 +313,7 @@ func (w *WAL) Replay(from uint64, fn func(lsn uint64, payload []byte) error) err
 			}
 			return fn(lsn, payload)
 		})
-		f.Close()
+		_ = f.Close()
 		if err != nil {
 			return fmt.Errorf("wal: replay segment %s: %w", path, err)
 		}
@@ -363,7 +363,7 @@ func (w *WAL) Close() error {
 	}
 	w.closed = true
 	if err := fullSync(w.active); err != nil {
-		w.active.Close()
+		_ = w.active.Close()
 		return err
 	}
 	return w.active.Close()
@@ -457,6 +457,6 @@ func syncDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return f.Sync()
 }

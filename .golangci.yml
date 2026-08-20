@@ -1,0 +1,28 @@
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+
+  exclusions:
+    generated: lax
+
+    # Excludes the conventional cases where a returned error is genuinely not
+    # actionable -- writing to stdout from a CLI being the main one here. Every
+    # other unchecked error in this repo is marked with an explicit `_ =` at the
+    # call site, so the intent is visible in the code rather than buried in this
+    # file.
+    presets:
+      - std-error-handling
+
+    paths:
+      # Generated from proto/conveyor/v1/queue.proto; not ours to lint.
+      - internal/genproto
+
+    rules:
+      # A deferred Close in a test is cleanup, not error handling: the test has
+      # already made its assertions by then, and there is nothing to recover.
+      # Production code still gets checked.
+      - path: _test\.go
+        linters:
+          - errcheck

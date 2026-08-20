@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/broker"
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1/conveyorv1connect"
@@ -44,7 +42,14 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
-	defer store.Close()
+	// This is the last write the process makes. A failure here can mean the log
+	// did not reach disk, which is exactly the kind of thing an operator needs
+	// told rather than swallowed.
+	defer func() {
+		if cerr := store.Close(); cerr != nil {
+			logger.Error("closing the store failed; the log may not be fully flushed", "err", cerr)
+		}
+	}()
 
 	stats := store.Stats("")
 	logger.Info("recovered",
@@ -71,12 +76,14 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 	path, handler := conveyorv1connect.NewBrokerServiceHandler(broker.NewServer(store, dispatcher))
 	mux.Handle(path, handler)
 
-	// h2c serves HTTP/2 without TLS, which the streaming Lease RPC will want
-	// and which keeps gRPC clients compatible over a plaintext local socket.
+	// Serve HTTP/2 without TLS, which the streaming Lease RPC wants and which
+	// keeps gRPC clients compatible over a plaintext local socket. HTTP/1.1
+	// stays enabled so plain curl still works against the Connect endpoints.
 	srv := &http.Server{
 		Addr:              brokerAddr,
-		Handler:           h2c.NewHandler(mux, &http2.Server{}),
+		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
+		Protocols:         broker.Protocols(),
 	}
 
 	// Periodic snapshots keep recovery time bounded; without them the WAL grows

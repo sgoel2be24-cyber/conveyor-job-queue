@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/broker"
 	conveyorv1 "github.com/sgoel2be24-cyber/conveyor-job-queue/internal/genproto/conveyor/v1"
@@ -51,7 +49,9 @@ func startBroker(t *testing.T, cfg broker.Config) (*broker.Store, conveyorv1conn
 	mux := http.NewServeMux()
 	path, h := conveyorv1connect.NewBrokerServiceHandler(broker.NewServer(store, dispatcher))
 	mux.Handle(path, h)
-	srv := httptest.NewServer(h2c.NewHandler(mux, &http2.Server{}))
+	srv := httptest.NewUnstartedServer(mux)
+	srv.Config.Protocols = broker.Protocols()
+	srv.Start()
 
 	t.Cleanup(func() {
 		srv.Close()

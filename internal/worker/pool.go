@@ -56,7 +56,7 @@ func (p *Pool) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("open lease stream: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	p.Logger.Info("worker started",
 		"worker", p.WorkerID, "queue", p.Queue,
