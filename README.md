@@ -10,10 +10,10 @@ The interesting part is not the happy path — it is what happens when things
 die. Conveyor's central claim is that **a job the broker has acknowledged
 survives a `kill -9`**, and that claim is tested rather than asserted.
 
-**Status:** Phases 1–2 of 5 complete. Jobs are durably queued, dispatched to
-workers, retried with backoff, and dead-lettered — the system is fully usable
-end to end. Metrics and the `bench` subcommand (Phase 3) are still stubs. See
-[docs/DESIGN.md](docs/DESIGN.md) for the full design and roadmap.
+**Status:** feature-complete. Jobs are durably queued, dispatched to workers,
+retried with backoff, and dead-lettered, with Prometheus metrics and a
+load-generator for measuring it. Broker high availability and a chaos-testing
+harness remain as optional extensions — see [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Try it
 
@@ -36,6 +36,10 @@ go build -o bin/conveyor ./cmd/conveyor
 ./bin/conveyor status
 ./bin/conveyor dlq list
 ./bin/conveyor dlq replay <job-id>     # after fixing the cause
+
+# Prometheus metrics, and a load generator to move them
+curl -s localhost:7777/metrics | grep '^conveyor_'
+./bin/conveyor bench --concurrency 64 --duration 10s
 ```
 
 Two things worth doing yourself, because they are the whole point:
@@ -122,24 +126,42 @@ Apple M5, macOS 26.6, APFS on internal SSD. Reproduce with
 
 ### Durability costs what it costs
 
-| Commit mode | Per record | Throughput | vs. per-record flush |
+Encoding and writing a record costs **1.29 µs**. Making it survive a power loss
+costs **3.78 ms**. That is the single most important fact about this system:
+**99.97% of a durable write is waiting for the drive.** No amount of faster
+serialization moves that number.
+
+### Group commit turns it into throughput
+
+A flush makes *every* record written before it durable, so N concurrent
+submitters need one flush between them rather than N. Measured end to end
+through the RPC stack with `conveyor bench`:
+
+| Concurrent submitters | Throughput | p50 latency | Submissions per flush |
 | --- | --- | --- | --- |
-| `F_FULLFSYNC` every record | 3.78 ms | ~264 rec/s | 1× |
-| Group commit, batch 8 | 465 µs | ~2,150 rec/s | 8.1× |
-| Group commit, batch 32 | 121 µs | ~8,260 rec/s | 31× |
-| Group commit, batch 128 | 29.4 µs | ~34,000 rec/s | 129× |
-| Group commit, batch 512 | 10.6 µs | ~94,300 rec/s | 357× |
-| No flush (encode + write only) | 1.29 µs | ~777,000 rec/s | 2,940× |
+| 1 | 276/s | 3.9 ms | 1.0 |
+| 8 | 1,227/s | 6.3 ms | 4.0 |
+| 64 | 8,938/s | 7.1 ms | 31.6 |
+| 256 | **32,232/s** | 7.8 ms | 121.4 |
 
-Encoding and writing a record costs 1.29 µs; making it survive a power loss
-costs 3.78 ms. **99.97% of a durable write is waiting for the drive**, which is
-why batching commits — not a faster serialization format — is the lever that
-matters. Amortizing one flush across 512 records buys a 357× throughput gain in
-exchange for a bounded latency window.
+**117× more throughput, and latency barely moves.** The disk is doing the same
+work throughout — roughly 280 flushes per second at ~3.5 ms each, whether
+throughput is 276/s or 32,000/s. All the extra capacity comes from amortizing a
+cost that was already being paid.
 
-The broker currently flushes once per submission (the 264 rec/s row). Wiring
-group commit into the submit path is Phase 3; the numbers above are the ceiling
-it is aiming at.
+A single submitter sees no gain, which is correct: there is nobody to share a
+flush with. Conveyor deliberately does **not** wait to accumulate a batch —
+waiting would trade latency for batch size, and the batch fills on its own
+exactly when there is load to fill it.
+
+Getting here took two fixes that only showed up under measurement, both
+described in [docs/DESIGN.md](docs/DESIGN.md): a lock held across the flush, and
+`write(2)` on the caller's path. Reproduce with:
+
+```sh
+conveyor bench --concurrency 1     # then compare
+conveyor bench --concurrency 256
+```
 
 ### Recovery is fast
 
@@ -198,13 +220,14 @@ offset** within the final record, asserting each time that complete records
 survive, the partial one is discarded, and the log is immediately writable
 again.
 
-The two invariants the whole design rests on were verified by mutation — the
-test is only worth having if reintroducing of the bug makes it fail:
+The invariants the whole design rests on were verified by mutation — a test is
+only worth having if reintroducing the bug makes it fail:
 
 | Bug reintroduced | Test that caught it |
 | --- | --- |
 | Fencing checks the token but not the lease state | `TestZombieWorkerAckIsFenced` |
 | A timed-out lease doesn't consume the retry budget | `TestLeaseTimeoutConsumesRetryBudget` |
+| The append lock is held across the flush | `TestGroupCommitSharesFlushes` |
 
 End-to-end tests run the real stack — HTTP server, streaming RPC, worker pool —
 including a deliberately wedged worker that loses its job to another and then

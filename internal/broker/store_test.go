@@ -253,17 +253,14 @@ func TestSnapshotTrimsLogAndPreservesState(t *testing.T) {
 // already reached a terminal state.
 func TestSnapshotDeletesRedundantSegments(t *testing.T) {
 	dir := t.TempDir()
-	s := mustOpenStore(t, dir)
-	defer s.Close()
 
-	// Enough jobs to spill across many segments at the default segment size is
-	// slow, so drive rotation directly through the WAL's own limit instead.
-	s.log.Close()
-	reopened, err := openSmallSegmentWAL(filepath.Join(dir, walDirName))
+	// Filling many segments at the default 16MiB size would take a while, so
+	// shrink the segments instead of writing more.
+	s, err := Open(Config{Dir: dir, WALSegmentSize: 4 << 10})
 	if err != nil {
-		t.Fatalf("reopen wal: %v", err)
+		t.Fatalf("open store: %v", err)
 	}
-	s.log = reopened
+	defer s.Close()
 
 	submitN(t, s, "emails", 200)
 	segmentsBefore := len(walSegments(t, dir))

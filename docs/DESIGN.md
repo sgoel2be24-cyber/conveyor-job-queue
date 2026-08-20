@@ -117,6 +117,38 @@ This matters because leases are the most frequent write in the system. Flushing
 each one would cap the broker at a few hundred leases per second (see the
 `F_FULLFSYNC` cost above).
 
+### Group commit, and two bugs that only measurement found
+
+A flush makes every record written before it durable, so concurrent submitters
+should be able to share one. Implementing that took three attempts, and the
+first two *looked* correct — the `bench` subcommand is what exposed them.
+
+**Attempt 1 — 265/s, batch size 1.0.** Callers appended, released the store
+lock, and waited on a shared committer. Batching still never happened, because
+`WAL.Sync` took the *same mutex* `WAL.Append` needed. While a flush ran, nobody
+could append; the pipeline degenerated into flush → one append → flush, so
+every record paid for a flush of its own. A lock held across a 3.5 ms disk
+operation serializes everything behind it.
+
+**Attempt 2 — 1,700/s, batch size ~5.** Giving flushes their own lock helped,
+but not nearly enough. A probe (`Append` latency while a flusher loops)
+explained it: appends were fast at the median, 12 µs, but **3.6 ms at p99** —
+a `write(2)` landing while the drive is busy with an `F_FULLFSYNC` blocks until
+that flush finishes. Since `Append` was called while holding the store lock,
+one unlucky writer stalled all the others for milliseconds.
+
+**Attempt 3 — 32,232/s, batch size 121.** `Append` no longer touches the file
+at all. It frames the record into an in-memory buffer; `Sync` writes the whole
+accumulated buffer with a single `write` and then flushes it. With the syscall
+off the caller's path entirely, writers keep arriving at full speed while the
+disk works, and one flush covers hundreds of them.
+
+The lesson, and the reason this is worth writing down: **all three versions
+were correct.** They differed only in throughput, by two orders of magnitude,
+and no test would have told them apart. `TestGroupCommitSharesFlushes` now
+guards the property directly — reintroducing the attempt-1 lock takes it from
+16 records per flush to exactly 1.0.
+
 ### Fencing tokens without a flush per lease
 
 Fencing only works if a token is never issued twice. The obvious way to
@@ -182,8 +214,27 @@ rejected if it's stale. Generated code lives in `internal/genproto/` (run
 
 ## Observability
 
-Prometheus `/metrics`: enqueue rate, dispatch latency histogram, queue depth
-gauge, retry/failure counters. CLI: `status`, `dlq list`, `dlq replay`.
+Prometheus metrics are served at `/metrics` on the broker's own listener.
+
+The metric set is chosen to answer what an on-call operator actually asks — is
+work piling up, is it failing, and is the broker itself the bottleneck:
+
+- **Flow:** `jobs_submitted_total`, `jobs_leased_total`, `jobs_completed_total`,
+  `jobs_failed_total{cause}`, `jobs_dead_lettered_total`. The `cause` label
+  separates a handler reporting failure from a lease the broker had to reclaim
+  — the difference between "the work is broken" and "the worker is".
+- **Backlog:** `queue_jobs{queue,state}` and `dispatch_delay_seconds`, measured
+  from the moment a job became *eligible* so a deliberate delay or a retry
+  backoff is not miscounted as queueing latency.
+- **The bottleneck:** `wal_commit_seconds` and `wal_commit_batch_records`.
+  Together these say whether the disk is slow or the batching simply has nothing
+  to batch — a batch size pinned at 1 under load means submitters are arriving
+  one at a time, which is exactly the failure described above.
+- **Fencing:** `fenced_requests_total{op}`. A non-zero rate means workers are
+  stalling past their leases. Healthy, in that the fence is working, but worth
+  knowing about.
+
+CLI: `status`, `get`, `dlq list`, `dlq replay`, and `bench` for load.
 
 ## Benchmarks
 
@@ -196,12 +247,11 @@ Measured on Apple M5 / macOS 26.6 / APFS. Full tables in the
    the instant before death whose response never returned) — the at-least-once
    contract, observed rather than assumed.
 2. **Recovery speed.** ✅ 100,000 records replayed in 7.7 ms (~77 ns/record).
-3. **Group-commit throughput.** ⏳ baseline measured, not yet wired in. One
-   `F_FULLFSYNC` per record costs 3.78 ms (~264 rec/s); encoding and writing
-   that record costs 1.29 µs. 99.97% of a durable write is waiting on the
-   drive. Amortizing one flush over 512 records drops the per-record cost to
-   10.6 µs — a 357× gain for a bounded latency window. Wiring this into the
-   submit path is Phase 3.
+3. **Group-commit throughput.** ✅ Measured end to end with `conveyor bench`:
+   276/s at one submitter, **32,232/s at 256**, with p50 latency essentially
+   flat (3.9 ms → 7.8 ms) and 121 submissions sharing each flush. The disk does
+   the same ~280 flushes/sec throughout; the gain is entirely amortization. See
+   the section above for the two bugs found along the way.
 4. **Zombie-worker fencing test.** ✅ Covered at two levels. In-process unit
    tests (`lease_test.go`) drive the exact race — reclaim a lease, then have
    the original holder Ack/Nack/Heartbeat — and assert each is refused. An
@@ -227,8 +277,12 @@ Measured on Apple M5 / macOS 26.6 / APFS. Full tables in the
       heartbeat renewal, lease-timeout reclaim through the unified retry
       counter, exponential backoff with equal jitter, dead-letter queue with
       `dlq list` / `dlq replay`, and shell + webhook handlers.
-- [ ] **Phase 3** — Prometheus metrics, group commit on the submit path, the
-      `bench` subcommand, README with the resulting numbers.
+- [x] **Phase 3** — group commit on the submit path (265/s → 32,232/s),
+      Prometheus metrics at `/metrics`, and the `bench` load generator that
+      measures them.
+
+*Core complete. The phases below are optional extensions, not required for the
+system to be correct or usable.*
 - [ ] **Phase 4 (stretch)** — broker HA via `hashicorp/raft`-backed leader
       election, WAL replication, automatic failover.
 - [ ] **Phase 5 (stretch)** — chaos harness: random `SIGKILL` of

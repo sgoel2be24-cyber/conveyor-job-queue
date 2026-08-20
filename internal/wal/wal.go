@@ -80,20 +80,54 @@ type Options struct {
 	MaxSegmentSize int64
 }
 
-// WAL is an append-only, crash-safe log. It is safe for concurrent use, though
-// appends are serialized: durability requires that each commit reach stable
-// storage in order.
+// WAL is an append-only, crash-safe log, safe for concurrent use.
+//
+// # Appending is decoupled from writing
+//
+// Append does not touch the file. It frames the record into an in-memory
+// buffer and returns; the bytes reach the disk when someone calls Sync, which
+// writes the whole accumulated buffer in one go and then flushes it.
+//
+// This split is what makes group commit possible. The naive alternative --
+// write(2) on the caller's path -- looks cheap, and usually is: a write takes
+// microseconds. But a write that lands while the drive is busy with an
+// F_FULLFSYNC blocks for the rest of that flush, and callers hold their own
+// locks while they append. One unlucky writer then stalls every other writer
+// for milliseconds, so records trickle in one at a time and each ends up paying
+// for a flush of its own. Buffering removes the syscall from the caller's path
+// entirely, so writers keep arriving at full speed while the disk works and a
+// single flush can cover hundreds of them.
+//
+// The durability contract is unchanged: a record is on stable storage once a
+// Sync that began after the record was appended has returned successfully.
+// Records still sitting in the buffer when a process dies are lost, which is
+// correct -- nobody was told they were durable.
+//
+// # Locking
+//
+// mu guards the buffer and append bookkeeping, and is held only for the
+// microseconds it takes to frame a record. Sync takes mu just long enough to
+// write the buffer out, then flushes with mu released.
+//
+// fileMu guards which file is active, so a flush is never left holding a handle
+// that rotation has closed underneath it. It is held for reading while flushing
+// and for writing while rotating; the lock order is always mu -> fileMu.
 type WAL struct {
 	dir            string
 	maxSegmentSize int64
 
+	fileMu sync.RWMutex
+	active *os.File
+	closed bool
+
 	mu         sync.Mutex
+	buf        []byte   // records appended but not yet written to the file
 	bases      []uint64 // sorted base LSNs, one per segment file
-	active     *os.File
 	activeBase uint64
+	// activeSize counts bytes already written plus bytes still buffered, since
+	// both are destined for the active segment.
 	activeSize int64
 	nextLSN    uint64
-	closed     bool
 }
 
 // Open opens (or creates) the log in opts.Dir, repairing a torn tail left by a
@@ -178,14 +212,19 @@ func (w *WAL) Append(payload []byte) (uint64, error) {
 
 // AppendSync writes payload and flushes it all the way to stable storage,
 // returning only once the record would survive a power loss.
+//
+// The append lock is released before flushing, so this does not stall other
+// writers for the duration of the disk write. A concurrent append may therefore
+// be made durable by the same flush, which is harmless -- the guarantee here is
+// that this record is durable on return, not that it is the only one.
 func (w *WAL) AppendSync(payload []byte) (uint64, error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	lsn, err := w.appendLocked(payload)
+	w.mu.Unlock()
 	if err != nil {
 		return 0, err
 	}
-	if err := fullSync(w.active); err != nil {
+	if err := w.Sync(); err != nil {
 		return 0, fmt.Errorf("wal: sync: %w", err)
 	}
 	return lsn, nil
@@ -210,44 +249,102 @@ func (w *WAL) appendLocked(payload []byte) (uint64, error) {
 		}
 	}
 
-	rec := make([]byte, size)
-	binary.LittleEndian.PutUint32(rec[0:4], uint32(len(payload)))
-	copy(rec[headerSize:], payload)
+	// Frame straight into the pending buffer; no syscall on this path.
+	off := len(w.buf)
+	w.buf = append(w.buf, 0, 0, 0, 0, 0, 0, 0, 0)
+	binary.LittleEndian.PutUint32(w.buf[off:off+4], uint32(len(payload)))
+	w.buf = append(w.buf, payload...)
 	h := crc32.New(crcTable)
-	h.Write(rec[0:4])
+	h.Write(w.buf[off : off+4])
 	h.Write(payload)
-	binary.LittleEndian.PutUint32(rec[4:8], h.Sum32())
+	binary.LittleEndian.PutUint32(w.buf[off+4:off+8], h.Sum32())
 
-	if _, err := w.active.Write(rec); err != nil {
-		return 0, fmt.Errorf("wal: write: %w", err)
-	}
 	w.activeSize += size
 	lsn := w.nextLSN
 	w.nextLSN++
 	return lsn, nil
 }
 
-// Sync flushes buffered records to stable storage.
+// flushBufferLocked writes pending records to the active segment without
+// flushing them to stable storage. Callers must hold mu.
+func (w *WAL) flushBufferLocked() error {
+	if len(w.buf) == 0 {
+		return nil
+	}
+	if _, err := w.active.Write(w.buf); err != nil {
+		return fmt.Errorf("wal: write: %w", err)
+	}
+	w.buf = w.buf[:0]
+	return nil
+}
+
+// Sync writes every record appended so far and flushes them to stable storage.
+//
+// mu is held only for the single write that drains the buffer, never across the
+// flush itself, so callers keep appending while the disk works -- which is what
+// lets the next flush cover a whole batch. See the type comment.
 func (w *WAL) Sync() error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	if w.closed {
+		w.mu.Unlock()
+		return ErrClosed
+	}
+	if err := w.flushBufferLocked(); err != nil {
+		w.mu.Unlock()
+		return err
+	}
+	w.mu.Unlock()
+
+	// A rotation slipping in here is harmless: it flushes and syncs the segment
+	// we just wrote to before closing it, so those records are durable either
+	// way.
+	w.fileMu.RLock()
+	defer w.fileMu.RUnlock()
 	if w.closed {
 		return ErrClosed
 	}
 	return fullSync(w.active)
 }
 
+// rotateLocked closes the active segment and starts a new one.
+//
+// fileMu is held exclusively for the whole swap, which is what stops a
+// concurrent flush from being handed a file descriptor that is closed out from
+// under it. Rotation happens once per segment (16MiB by default), so blocking
+// flushes for its duration costs nothing measurable.
+//
+// Callers must hold mu.
 func (w *WAL) rotateLocked() error {
+	// Anything still buffered belongs to the segment being closed, so it has to
+	// go out before the handle is swapped.
+	if err := w.flushBufferLocked(); err != nil {
+		return err
+	}
+
+	w.fileMu.Lock()
+	defer w.fileMu.Unlock()
+
 	if err := fullSync(w.active); err != nil {
 		return fmt.Errorf("wal: sync before rotate: %w", err)
 	}
 	if err := w.active.Close(); err != nil {
 		return fmt.Errorf("wal: close before rotate: %w", err)
 	}
-	return w.createSegment(w.nextLSN)
+	return w.createSegmentLocked(w.nextLSN)
 }
 
+// createSegment starts a new segment, taking fileMu itself. Used where no
+// rotation is in progress.
+//
+// Callers must hold mu.
 func (w *WAL) createSegment(base uint64) error {
+	w.fileMu.Lock()
+	defer w.fileMu.Unlock()
+	return w.createSegmentLocked(base)
+}
+
+// createSegmentLocked starts a new segment. Callers must hold mu and fileMu.
+func (w *WAL) createSegmentLocked(base uint64) error {
 	path := segmentPath(w.dir, base)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
@@ -283,6 +380,12 @@ func (w *WAL) Replay(from uint64, fn func(lsn uint64, payload []byte) error) err
 	if w.closed {
 		w.mu.Unlock()
 		return ErrClosed
+	}
+	// Replay reads files, so anything still buffered has to be written first or
+	// it would be invisible to the caller that just appended it.
+	if err := w.flushBufferLocked(); err != nil {
+		w.mu.Unlock()
+		return err
 	}
 	bases := append([]uint64(nil), w.bases...)
 	w.mu.Unlock()
@@ -354,14 +457,22 @@ func (w *WAL) TruncateBefore(lsn uint64) error {
 	return nil
 }
 
-// Close flushes and closes the log.
+// Close flushes and closes the log. It waits for any flush in progress, so a
+// caller cannot pull the file out from under one.
 func (w *WAL) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.fileMu.Lock()
+	defer w.fileMu.Unlock()
+
 	if w.closed {
 		return nil
 	}
 	w.closed = true
+	if err := w.flushBufferLocked(); err != nil {
+		_ = w.active.Close()
+		return err
+	}
 	if err := fullSync(w.active); err != nil {
 		_ = w.active.Close()
 		return err

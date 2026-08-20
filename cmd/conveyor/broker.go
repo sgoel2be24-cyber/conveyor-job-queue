@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/broker"
@@ -75,6 +76,7 @@ func runBroker(cmd *cobra.Command, _ []string) error {
 	mux := http.NewServeMux()
 	path, handler := conveyorv1connect.NewBrokerServiceHandler(broker.NewServer(store, dispatcher))
 	mux.Handle(path, handler)
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Serve HTTP/2 without TLS, which the streaming Lease RPC wants and which
 	// keeps gRPC clients compatible over a plaintext local socket. HTTP/1.1

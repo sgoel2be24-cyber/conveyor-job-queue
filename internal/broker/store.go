@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/metrics"
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/wal"
 )
 
@@ -54,6 +55,9 @@ type Config struct {
 	// EpochBlockSize is how many fencing tokens to claim per durable
 	// reservation. Zero means defaultEpochBlockSize.
 	EpochBlockSize uint64
+	// WALSegmentSize is the size at which log segments rotate. Zero means the
+	// wal package default.
+	WALSegmentSize int64
 }
 
 // Store is the durable job store: a write-ahead log plus the in-memory state
@@ -70,6 +74,8 @@ type Store struct {
 	backoffCap     time.Duration
 	epochBlockSize uint64
 
+	commit *committer
+
 	mu      sync.RWMutex
 	log     *wal.WAL
 	jobs    map[string]*job.Job
@@ -77,6 +83,10 @@ type Store struct {
 	leased  map[string]struct{} // job IDs currently out on lease
 	index   *scheduleIndex
 	lastLSN uint64
+
+	// failed is set when a flush to stable storage fails, which poisons the
+	// store. See commitDurable.
+	failed error
 
 	// nextEpoch is the next fencing token to hand out; epochReservedUpTo is the
 	// highest one the log says we may hand out without another reservation.
@@ -110,7 +120,10 @@ func Open(cfg Config) (*Store, error) {
 		return nil, fmt.Errorf("broker: create snapshot dir: %w", err)
 	}
 
-	log, err := wal.Open(wal.Options{Dir: filepath.Join(cfg.Dir, walDirName)})
+	log, err := wal.Open(wal.Options{
+		Dir:            filepath.Join(cfg.Dir, walDirName),
+		MaxSegmentSize: cfg.WALSegmentSize,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +140,9 @@ func Open(cfg Config) (*Store, error) {
 		leased:         make(map[string]struct{}),
 		index:          newScheduleIndex(),
 		notifyCh:       make(chan struct{}, 1),
+		commit:         newCommitter(log),
 	}
+	recoveryStart := time.Now()
 
 	snapLSN, err := s.loadLatestSnapshot()
 	if err != nil {
@@ -161,7 +176,70 @@ func Open(cfg Config) (*Store, error) {
 	// reserve the next block.
 	s.nextEpoch = s.epochReservedUpTo + 1
 
+	metrics.RecoveryDuration.Set(time.Since(recoveryStart).Seconds())
+	metrics.RecoveredJobs.Set(float64(len(s.jobs)))
+
 	return s, nil
+}
+
+// recordLocked appends an event to the log and applies it in memory.
+//
+// The record is written but NOT yet durable. The caller must release s.mu and
+// then call commitDurable before reporting success to anyone -- that split is
+// the whole point, because it lets concurrent callers share one flush instead
+// of queueing behind each other's.
+//
+// Callers must hold s.mu.
+func (s *Store) recordLocked(e *event) error {
+	if s.failed != nil {
+		return s.failed
+	}
+	payload, err := encodeEvent(e)
+	if err != nil {
+		return err
+	}
+	lsn, err := s.log.Append(payload)
+	if err != nil {
+		return fmt.Errorf("broker: append: %w", err)
+	}
+	if err := s.apply(e); err != nil {
+		return err
+	}
+	s.lastLSN = lsn
+	return nil
+}
+
+// commitDurable flushes the log, sharing the cost with anyone else waiting.
+//
+// A failed flush poisons the store: every later operation fails too, and the
+// broker stops accepting work rather than carrying on. That is deliberate. Once
+// a flush has failed there is no way to learn which records reached the disk --
+// the operating system may have already discarded the dirty pages, so a retry
+// can report success while the data is gone. This is the lesson of the
+// PostgreSQL "fsyncgate" discussion, and the only safe response is to stop and
+// let recovery re-derive state from what is actually on disk.
+//
+// Callers must NOT hold s.mu.
+func (s *Store) commitDurable() error {
+	err := s.commit.commit()
+	if err == nil {
+		return nil
+	}
+
+	s.mu.Lock()
+	if s.failed == nil {
+		s.failed = fmt.Errorf("broker: durability lost, refusing further writes: %w", err)
+	}
+	err = s.failed
+	s.mu.Unlock()
+	return err
+}
+
+// Failed reports the error that poisoned the store, or nil if it is healthy.
+func (s *Store) Failed() error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.failed
 }
 
 // apply mutates in-memory state. It must be deterministic and must not touch
@@ -379,11 +457,18 @@ func (s *Store) Submit(p SubmitParams) (*job.Job, bool, error) {
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.failed != nil {
+		err := s.failed
+		s.mu.Unlock()
+		return nil, false, err
+	}
 
 	if p.IdempotencyKey != "" {
 		if id, ok := s.idem[idemKey(p.Queue, p.IdempotencyKey)]; ok {
-			return s.jobs[id].Clone(), true, nil
+			existing := s.jobs[id].Clone()
+			s.mu.Unlock()
+			metrics.JobsDeduplicated.WithLabelValues(p.Queue).Inc()
+			return existing, true, nil
 		}
 	}
 
@@ -401,29 +486,23 @@ func (s *Store) Submit(p SubmitParams) (*job.Job, bool, error) {
 		EligibleAt:     now.Add(p.Delay),
 	}
 
-	e := &event{Type: eventSubmit, Job: j}
-	payload, err := encodeEvent(e)
-	if err != nil {
+	if err := s.recordLocked(&event{Type: eventSubmit, Job: j}); err != nil {
+		s.mu.Unlock()
+		return nil, false, err
+	}
+	s.index.push(j, now)
+	accepted := j.Clone()
+	s.mu.Unlock()
+
+	// The flush happens with s.mu released, so concurrent submitters queue on
+	// the disk together rather than behind each other's locks -- see committer.
+	if err := s.commitDurable(); err != nil {
 		return nil, false, err
 	}
 
-	// Durable first, in-memory second: if the append fails, nothing has changed
-	// and the caller learns the job was not accepted.
-	//
-	// The flush happens under s.mu, which serializes submissions. That is the
-	// throughput ceiling this design starts with, and the baseline the
-	// group-commit work measures against (docs/DESIGN.md).
-	lsn, err := s.log.AppendSync(payload)
-	if err != nil {
-		return nil, false, fmt.Errorf("broker: append: %w", err)
-	}
-	if err := s.apply(e); err != nil {
-		return nil, false, err
-	}
-	s.lastLSN = lsn
-	s.index.push(j, now)
+	metrics.JobsSubmitted.WithLabelValues(p.Queue).Inc()
 	s.signal()
-	return j.Clone(), false, nil
+	return accepted, false, nil
 }
 
 // Lease hands the next eligible job on a queue to a worker, or returns nil if
@@ -470,28 +549,25 @@ func (s *Store) Lease(queue, workerID string, dur time.Duration) (*job.Job, erro
 			return nil, err
 		}
 
-		ev := &event{
+		// How long this job sat waiting once it was allowed to run. Measured
+		// from EligibleAt rather than EnqueuedAt so a deliberate delay or a
+		// retry backoff is not counted as queueing latency.
+		waited := now.Sub(j.EligibleAt).Seconds()
+
+		if err := s.recordLocked(&event{
 			Type:           eventLease,
 			JobID:          j.ID,
 			Epoch:          epoch,
 			WorkerID:       workerID,
 			LeaseExpiresAt: now.Add(dur),
 			Attempt:        j.Attempt + 1,
-		}
-		payload, err := encodeEvent(ev)
-		if err != nil {
+		}); err != nil {
 			s.index.push(j, now)
 			return nil, err
 		}
-		lsn, err := s.log.Append(payload)
-		if err != nil {
-			s.index.push(j, now)
-			return nil, fmt.Errorf("broker: append lease: %w", err)
-		}
-		if err := s.apply(ev); err != nil {
-			return nil, err
-		}
-		s.lastLSN = lsn
+
+		metrics.JobsLeased.WithLabelValues(queue).Inc()
+		metrics.DispatchDelay.WithLabelValues(queue).Observe(waited)
 		return j.Clone(), nil
 	}
 }
@@ -500,29 +576,30 @@ func (s *Store) Lease(queue, workerID string, dur time.Duration) (*job.Job, erro
 // caller no longer holds the lease -- the fencing check.
 func (s *Store) Ack(jobID string, epoch uint64) (bool, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	j, ok := s.jobs[jobID]
 	if !ok {
+		s.mu.Unlock()
 		return false, ErrJobNotFound
 	}
 	if !holdsLease(j, epoch) {
+		s.mu.Unlock()
+		metrics.FencedRequests.WithLabelValues("ack").Inc()
 		return false, nil
 	}
 
-	e := &event{Type: eventAck, JobID: jobID, Epoch: epoch}
-	payload, err := encodeEvent(e)
-	if err != nil {
+	queue := j.Queue
+	if err := s.recordLocked(&event{Type: eventAck, JobID: jobID, Epoch: epoch}); err != nil {
+		s.mu.Unlock()
 		return false, err
 	}
-	lsn, err := s.log.AppendSync(payload)
-	if err != nil {
-		return false, fmt.Errorf("broker: append ack: %w", err)
-	}
-	if err := s.apply(e); err != nil {
+	s.mu.Unlock()
+
+	if err := s.commitDurable(); err != nil {
 		return false, err
 	}
-	s.lastLSN = lsn
+
+	metrics.JobsCompleted.WithLabelValues(queue).Inc()
 	s.signal()
 	return true, nil
 }
@@ -531,23 +608,38 @@ func (s *Store) Ack(jobID string, epoch uint64) (bool, error) {
 // lease, and whether the job was dead-lettered as a result.
 func (s *Store) Nack(jobID string, epoch uint64, reason string) (accepted, deadLettered bool, err error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	j, ok := s.jobs[jobID]
 	if !ok {
+		s.mu.Unlock()
 		return false, false, ErrJobNotFound
 	}
 	if !holdsLease(j, epoch) {
+		s.mu.Unlock()
+		metrics.FencedRequests.WithLabelValues("nack").Inc()
 		return false, false, nil
 	}
 	if reason == "" {
 		reason = "handler reported failure"
 	}
 
+	queue := j.Queue
 	deadLettered, err = s.failLocked(j, reason, false, time.Now().UTC())
 	if err != nil {
+		s.mu.Unlock()
 		return false, false, err
 	}
+	s.mu.Unlock()
+
+	if err := s.commitDurable(); err != nil {
+		return false, false, err
+	}
+
+	metrics.JobsFailed.WithLabelValues(queue, metrics.CauseHandler).Inc()
+	if deadLettered {
+		metrics.JobsDeadLettered.WithLabelValues(queue).Inc()
+	}
+	s.signal()
 	return true, deadLettered, nil
 }
 
@@ -572,7 +664,10 @@ func (s *Store) failLocked(j *job.Job, reason string, timeout bool, now time.Tim
 		eligible = now
 	}
 
-	e := &event{
+	// Written but not yet flushed: whoever called us commits once we return, so
+	// a sweep that reclaims many leases pays for a single flush rather than one
+	// per job.
+	if err := s.recordLocked(&event{
 		Type:       eventFail,
 		JobID:      j.ID,
 		Epoch:      j.Epoch,
@@ -581,23 +676,12 @@ func (s *Store) failLocked(j *job.Job, reason string, timeout bool, now time.Tim
 		NextState:  next,
 		EligibleAt: eligible,
 		Timeout:    timeout,
-	}
-	payload, err := encodeEvent(e)
-	if err != nil {
+	}); err != nil {
 		return false, err
 	}
-	lsn, err := s.log.AppendSync(payload)
-	if err != nil {
-		return false, fmt.Errorf("broker: append fail: %w", err)
-	}
-	if err := s.apply(e); err != nil {
-		return false, err
-	}
-	s.lastLSN = lsn
 
 	if next == job.StateRetryWait {
 		s.index.push(j, now)
-		s.signal()
 	}
 	return next == job.StateDeadLetter, nil
 }
@@ -632,9 +716,12 @@ func (s *Store) Heartbeat(jobID string, epoch uint64, dur time.Duration) (bool, 
 // the size of the queue.
 func (s *Store) ReclaimExpired(now time.Time) ([]string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
-	var reclaimed []string
+	var (
+		reclaimed    []string
+		queues       []string
+		deadLettered []string
+	)
 	for id := range s.leased {
 		j, ok := s.jobs[id]
 		if !ok || j.State != job.StateLeased {
@@ -644,42 +731,67 @@ func (s *Store) ReclaimExpired(now time.Time) ([]string, error) {
 		if j.LeaseExpiresAt.After(now) {
 			continue
 		}
-		if _, err := s.failLocked(j, "lease expired", true, now); err != nil {
+		queue := j.Queue
+		dead, err := s.failLocked(j, "lease expired", true, now)
+		if err != nil {
+			s.mu.Unlock()
 			return reclaimed, err
 		}
 		reclaimed = append(reclaimed, id)
+		queues = append(queues, queue)
+		if dead {
+			deadLettered = append(deadLettered, queue)
+		}
 	}
+	s.mu.Unlock()
+
+	if len(reclaimed) == 0 {
+		return nil, nil
+	}
+
+	// One flush for the whole sweep, however many leases it took back.
+	if err := s.commitDurable(); err != nil {
+		return reclaimed, err
+	}
+
+	for _, queue := range queues {
+		metrics.JobsFailed.WithLabelValues(queue, metrics.CauseTimeout).Inc()
+	}
+	for _, queue := range deadLettered {
+		metrics.JobsDeadLettered.WithLabelValues(queue).Inc()
+	}
+	s.signal()
 	return reclaimed, nil
 }
 
 // ReplayJob returns a dead-lettered job to its queue with a fresh retry budget.
 func (s *Store) ReplayJob(jobID string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	j, ok := s.jobs[jobID]
 	if !ok {
+		s.mu.Unlock()
 		return ErrJobNotFound
 	}
 	if j.State != job.StateDeadLetter {
+		s.mu.Unlock()
 		return ErrNotDeadLettered
 	}
 
 	now := time.Now().UTC()
-	e := &event{Type: eventReplayJob, JobID: jobID, EligibleAt: now}
-	payload, err := encodeEvent(e)
-	if err != nil {
+	queue := j.Queue
+	if err := s.recordLocked(&event{Type: eventReplayJob, JobID: jobID, EligibleAt: now}); err != nil {
+		s.mu.Unlock()
 		return err
 	}
-	lsn, err := s.log.AppendSync(payload)
-	if err != nil {
-		return fmt.Errorf("broker: append replay: %w", err)
-	}
-	if err := s.apply(e); err != nil {
-		return err
-	}
-	s.lastLSN = lsn
 	s.index.push(j, now)
+	s.mu.Unlock()
+
+	if err := s.commitDurable(); err != nil {
+		return err
+	}
+
+	metrics.JobsReplayed.WithLabelValues(queue).Inc()
 	s.signal()
 	return nil
 }

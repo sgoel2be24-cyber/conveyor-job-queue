@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/job"
+	"github.com/sgoel2be24-cyber/conveyor-job-queue/internal/metrics"
 )
 
 // DefaultDispatchTick is how often the dispatcher wakes on its own. Submissions
@@ -61,14 +62,29 @@ func NewDispatcher(store *Store, logger *slog.Logger) *Dispatcher {
 	}
 }
 
+// queueDepthInterval is how often the queue-depth gauges are refreshed.
+// Recomputing them walks every job, so it runs on its own slower cadence rather
+// than on every dispatch pass.
+const queueDepthInterval = 2 * time.Second
+
 // Run drives dispatch until ctx is cancelled.
 func (d *Dispatcher) Run(ctx context.Context) {
 	timer := time.NewTimer(d.tick)
 	defer timer.Stop()
 
+	depthTicker := time.NewTicker(queueDepthInterval)
+	defer depthTicker.Stop()
+	d.refreshQueueDepth()
+
 	for {
 		d.reclaimExpired()
 		d.dispatch()
+
+		select {
+		case <-depthTicker.C:
+			d.refreshQueueDepth()
+		default:
+		}
 
 		if !timer.Stop() {
 			select {
@@ -107,6 +123,17 @@ func (d *Dispatcher) signal() {
 	select {
 	case d.wake <- struct{}{}:
 	default:
+	}
+}
+
+// refreshQueueDepth republishes the per-queue, per-state gauges.
+func (d *Dispatcher) refreshQueueDepth() {
+	for _, q := range d.store.Stats("").Queues {
+		metrics.QueueDepth.WithLabelValues(q.Queue, "pending").Set(float64(q.Pending))
+		metrics.QueueDepth.WithLabelValues(q.Queue, "leased").Set(float64(q.Leased))
+		metrics.QueueDepth.WithLabelValues(q.Queue, "retry_wait").Set(float64(q.RetryWait))
+		metrics.QueueDepth.WithLabelValues(q.Queue, "done").Set(float64(q.Done))
+		metrics.QueueDepth.WithLabelValues(q.Queue, "dead_letter").Set(float64(q.DeadLetter))
 	}
 }
 
