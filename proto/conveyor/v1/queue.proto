@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package conveyor.v1;
+
+option go_package = "conveyor/internal/genproto/conveyor/v1;conveyorv1";
+
+// Broker is the RPC surface workers use to lease, acknowledge, and heartbeat jobs.
+// Every RPC that touches a specific job carries an epoch (fencing token): the broker
+// bumps a job's epoch on every lease issuance, including timeout-based reclaim, and
+// rejects any Ack/Nack/Heartbeat carrying a stale epoch instead of applying it. This
+// is what prevents a "zombie" worker (one that was merely slow, not actually dead)
+// from corrupting state after its lease has already been reassigned.
+service Broker {
+  // Lease streams job assignments to a worker as they become available for the
+  // requested queue, up to max_in_flight concurrently-leased jobs at a time.
+  rpc Lease(LeaseRequest) returns (stream LeaseResponse);
+
+  // Ack marks a leased job as successfully completed.
+  rpc Ack(AckRequest) returns (AckResponse);
+
+  // Nack marks a leased job as failed. The broker schedules it for retry with
+  // exponential backoff and jitter, or dead-letters it if max_retries is exhausted.
+  rpc Nack(NackRequest) returns (NackResponse);
+
+  // Heartbeat renews a job's lease so a long-running handler isn't reclaimed as if
+  // it had crashed.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message LeaseRequest {
+  string queue = 1;
+  string worker_id = 2;
+  int32 max_in_flight = 3;
+}
+
+message LeaseResponse {
+  string job_id = 1;
+  int64 epoch = 2;
+  string idempotency_key = 3;
+  string handler = 4;
+  bytes payload = 5;
+  int32 attempt = 6;
+  int64 lease_expires_at_unix_ms = 7;
+}
+
+message AckRequest {
+  string job_id = 1;
+  int64 epoch = 2;
+  string worker_id = 3;
+}
+
+message AckResponse {
+  // accepted is false when epoch is stale, meaning the job was already reclaimed
+  // and reassigned; the caller's work was not credited and should be discarded.
+  bool accepted = 1;
+}
+
+message NackRequest {
+  string job_id = 1;
+  int64 epoch = 2;
+  string worker_id = 3;
+  string reason = 4;
+}
+
+message NackResponse {
+  bool accepted = 1;
+  bool dead_lettered = 2;
+}
+
+message HeartbeatRequest {
+  string job_id = 1;
+  int64 epoch = 2;
+  string worker_id = 3;
+}
+
+message HeartbeatResponse {
+  bool accepted = 1;
+  int64 new_lease_expires_at_unix_ms = 2;
+}

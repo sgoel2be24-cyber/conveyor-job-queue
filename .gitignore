@@ -1,0 +1,14 @@
+# Build output
+/bin/
+/conveyor
+
+# Runtime data
+/data/
+*.wal
+
+# OS
+.DS_Store
+
+# Go
+*.test
+*.out
