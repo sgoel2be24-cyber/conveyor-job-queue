@@ -115,10 +115,11 @@ func TestParsePriority(t *testing.T) {
 	}
 }
 
-func TestNewIDIsUniqueAndSortable(t *testing.T) {
+func TestNewIDIsUniqueAndTimeOrdered(t *testing.T) {
 	const n = 1000
 	seen := make(map[string]bool, n)
-	prev := ""
+	prevTimestamp := ""
+
 	for i := 0; i < n; i++ {
 		id := NewID()
 		if seen[id] {
@@ -128,9 +129,17 @@ func TestNewIDIsUniqueAndSortable(t *testing.T) {
 		if len(id) != 32 {
 			t.Fatalf("ID %q has length %d, want 32", id, len(id))
 		}
-		if id < prev {
-			t.Errorf("ID %s sorts before its predecessor %s", id, prev)
+
+		// Only the leading 8 bytes are the timestamp; the rest is random. Two
+		// IDs minted within the same nanosecond therefore order by randomness,
+		// so whole IDs are not strictly ascending and asserting that they are
+		// makes for a test that fails a few times in a thousand. The guarantee
+		// NewID actually offers -- and the one worth checking -- is that the
+		// timestamp half never goes backwards.
+		timestamp := id[:16]
+		if timestamp < prevTimestamp {
+			t.Errorf("timestamp prefix %s precedes its predecessor %s", timestamp, prevTimestamp)
 		}
-		prev = id
+		prevTimestamp = timestamp
 	}
 }

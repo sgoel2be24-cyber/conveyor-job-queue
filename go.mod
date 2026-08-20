@@ -15,3 +15,8 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	golang.org/x/text v0.41.0 // indirect
 )
+
+tool (
+	connectrpc.com/connect/cmd/protoc-gen-connect-go
+	google.golang.org/protobuf/cmd/protoc-gen-go
+)

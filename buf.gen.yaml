@@ -1,8 +1,13 @@
 version: v2
+# The plugins are pinned as `tool` dependencies in go.mod and invoked through
+# `go tool`, so codegen uses the same versions on every machine and in CI
+# without anyone having to install them first. Running `buf generate` after a
+# fresh clone just works, and the generated code cannot drift because someone
+# had a different protoc-gen-go on their PATH.
 plugins:
-  - local: protoc-gen-go
+  - local: ["go", "tool", "protoc-gen-go"]
     out: internal/genproto
     opt: paths=source_relative
-  - local: protoc-gen-connect-go
+  - local: ["go", "tool", "protoc-gen-connect-go"]
     out: internal/genproto
     opt: paths=source_relative
