@@ -4,13 +4,27 @@ package conveyor.v1;
 
 option go_package = "conveyor/internal/genproto/conveyor/v1;conveyorv1";
 
-// Broker is the RPC surface workers use to lease, acknowledge, and heartbeat jobs.
-// Every RPC that touches a specific job carries an epoch (fencing token): the broker
-// bumps a job's epoch on every lease issuance, including timeout-based reclaim, and
-// rejects any Ack/Nack/Heartbeat carrying a stale epoch instead of applying it. This
-// is what prevents a "zombie" worker (one that was merely slow, not actually dead)
-// from corrupting state after its lease has already been reassigned.
-service Broker {
+// BrokerService is the RPC surface for both producers (Submit) and workers
+// (Lease/Ack/Nack/Heartbeat), plus operator introspection (Stats/Get).
+//
+// Every RPC that acts on an already-leased job carries an epoch (fencing
+// token): the broker bumps a job's epoch on every lease issuance, including
+// timeout-based reclaim, and rejects any Ack/Nack/Heartbeat carrying a stale
+// epoch instead of applying it. This is what stops a "zombie" worker — one that
+// was merely slow, not actually dead — from corrupting state after its lease
+// has already been reassigned to someone else.
+service BrokerService {
+  // Submit enqueues a job. If idempotency_key is set and a job with that key
+  // already exists on the queue, the existing job is returned and no new job is
+  // created.
+  rpc Submit(SubmitRequest) returns (SubmitResponse);
+
+  // Get looks up a single job by ID.
+  rpc Get(GetRequest) returns (GetResponse);
+
+  // Stats reports per-queue job counts by state.
+  rpc Stats(StatsRequest) returns (StatsResponse);
+
   // Lease streams job assignments to a worker as they become available for the
   // requested queue, up to max_in_flight concurrently-leased jobs at a time.
   rpc Lease(LeaseRequest) returns (stream LeaseResponse);
@@ -19,12 +33,94 @@ service Broker {
   rpc Ack(AckRequest) returns (AckResponse);
 
   // Nack marks a leased job as failed. The broker schedules it for retry with
-  // exponential backoff and jitter, or dead-letters it if max_retries is exhausted.
+  // exponential backoff and jitter, or dead-letters it once max_retries is
+  // exhausted.
   rpc Nack(NackRequest) returns (NackResponse);
 
-  // Heartbeat renews a job's lease so a long-running handler isn't reclaimed as if
-  // it had crashed.
+  // Heartbeat renews a job's lease so a long-running handler isn't reclaimed as
+  // if it had crashed.
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_NORMAL = 2;
+  PRIORITY_HIGH = 3;
+}
+
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_PENDING = 1;
+  JOB_STATE_LEASED = 2;
+  JOB_STATE_RETRY_WAIT = 3;
+  JOB_STATE_DONE = 4;
+  JOB_STATE_DEAD_LETTER = 5;
+}
+
+message Job {
+  string id = 1;
+  string queue = 2;
+  string handler = 3;
+  bytes payload = 4;
+  string idempotency_key = 5;
+  Priority priority = 6;
+  int32 max_retries = 7;
+  int32 attempt = 8;
+  JobState state = 9;
+  uint64 epoch = 10;
+  int64 enqueued_at_unix_ms = 11;
+  int64 eligible_at_unix_ms = 12;
+  int64 lease_expires_at_unix_ms = 13;
+  string leased_by = 14;
+  string last_error = 15;
+}
+
+message SubmitRequest {
+  string queue = 1;
+  bytes payload = 2;
+  string handler = 3;
+  string idempotency_key = 4;
+  Priority priority = 5;
+  int32 max_retries = 6;
+  int64 delay_ms = 7;
+}
+
+message SubmitResponse {
+  string job_id = 1;
+  // deduplicated is true when idempotency_key matched an existing job, meaning
+  // no new job was enqueued.
+  bool deduplicated = 2;
+}
+
+message GetRequest {
+  string job_id = 1;
+}
+
+message GetResponse {
+  bool found = 1;
+  Job job = 2;
+}
+
+message StatsRequest {
+  // queue optionally restricts the report to a single queue.
+  string queue = 1;
+}
+
+message QueueStats {
+  string queue = 1;
+  int64 pending = 2;
+  int64 leased = 3;
+  int64 retry_wait = 4;
+  int64 done = 5;
+  int64 dead_letter = 6;
+}
+
+message StatsResponse {
+  repeated QueueStats queues = 1;
+  int64 total_jobs = 2;
+  // last_lsn is the sequence number of the most recent durably-logged event.
+  uint64 last_lsn = 3;
 }
 
 message LeaseRequest {
@@ -35,7 +131,7 @@ message LeaseRequest {
 
 message LeaseResponse {
   string job_id = 1;
-  int64 epoch = 2;
+  uint64 epoch = 2;
   string idempotency_key = 3;
   string handler = 4;
   bytes payload = 5;
@@ -45,19 +141,20 @@ message LeaseResponse {
 
 message AckRequest {
   string job_id = 1;
-  int64 epoch = 2;
+  uint64 epoch = 2;
   string worker_id = 3;
 }
 
 message AckResponse {
-  // accepted is false when epoch is stale, meaning the job was already reclaimed
-  // and reassigned; the caller's work was not credited and should be discarded.
+  // accepted is false when the epoch is stale, meaning the job was already
+  // reclaimed and reassigned; the caller's work was not credited and any result
+  // it produced should be discarded.
   bool accepted = 1;
 }
 
 message NackRequest {
   string job_id = 1;
-  int64 epoch = 2;
+  uint64 epoch = 2;
   string worker_id = 3;
   string reason = 4;
 }
@@ -69,7 +166,7 @@ message NackResponse {
 
 message HeartbeatRequest {
   string job_id = 1;
-  int64 epoch = 2;
+  uint64 epoch = 2;
   string worker_id = 3;
 }
 

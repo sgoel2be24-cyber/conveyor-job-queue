@@ -15,9 +15,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27'
+
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - name: Lint protobuf schema
+        run: buf lint
+      - name: Check generated code is up to date
+        run: |
+          buf generate
+          git diff --exit-code -- internal/genproto
+
       - run: go build ./...
       - run: go vet ./...
+      # -race is not optional here: this is a concurrency-heavy system, and the
+      # bugs it catches are exactly the ones that pass a casual test run.
       - run: go test -race ./...
+
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest

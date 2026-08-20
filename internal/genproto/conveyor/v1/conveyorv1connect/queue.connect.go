@@ -21,8 +21,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// BrokerName is the fully-qualified name of the Broker service.
-	BrokerName = "conveyor.v1.Broker"
+	// BrokerServiceName is the fully-qualified name of the BrokerService service.
+	BrokerServiceName = "conveyor.v1.BrokerService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -33,174 +33,270 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BrokerLeaseProcedure is the fully-qualified name of the Broker's Lease RPC.
-	BrokerLeaseProcedure = "/conveyor.v1.Broker/Lease"
-	// BrokerAckProcedure is the fully-qualified name of the Broker's Ack RPC.
-	BrokerAckProcedure = "/conveyor.v1.Broker/Ack"
-	// BrokerNackProcedure is the fully-qualified name of the Broker's Nack RPC.
-	BrokerNackProcedure = "/conveyor.v1.Broker/Nack"
-	// BrokerHeartbeatProcedure is the fully-qualified name of the Broker's Heartbeat RPC.
-	BrokerHeartbeatProcedure = "/conveyor.v1.Broker/Heartbeat"
+	// BrokerServiceSubmitProcedure is the fully-qualified name of the BrokerService's Submit RPC.
+	BrokerServiceSubmitProcedure = "/conveyor.v1.BrokerService/Submit"
+	// BrokerServiceGetProcedure is the fully-qualified name of the BrokerService's Get RPC.
+	BrokerServiceGetProcedure = "/conveyor.v1.BrokerService/Get"
+	// BrokerServiceStatsProcedure is the fully-qualified name of the BrokerService's Stats RPC.
+	BrokerServiceStatsProcedure = "/conveyor.v1.BrokerService/Stats"
+	// BrokerServiceLeaseProcedure is the fully-qualified name of the BrokerService's Lease RPC.
+	BrokerServiceLeaseProcedure = "/conveyor.v1.BrokerService/Lease"
+	// BrokerServiceAckProcedure is the fully-qualified name of the BrokerService's Ack RPC.
+	BrokerServiceAckProcedure = "/conveyor.v1.BrokerService/Ack"
+	// BrokerServiceNackProcedure is the fully-qualified name of the BrokerService's Nack RPC.
+	BrokerServiceNackProcedure = "/conveyor.v1.BrokerService/Nack"
+	// BrokerServiceHeartbeatProcedure is the fully-qualified name of the BrokerService's Heartbeat RPC.
+	BrokerServiceHeartbeatProcedure = "/conveyor.v1.BrokerService/Heartbeat"
 )
 
-// BrokerClient is a client for the conveyor.v1.Broker service.
-type BrokerClient interface {
+// BrokerServiceClient is a client for the conveyor.v1.BrokerService service.
+type BrokerServiceClient interface {
+	// Submit enqueues a job. If idempotency_key is set and a job with that key
+	// already exists on the queue, the existing job is returned and no new job is
+	// created.
+	Submit(context.Context, *connect.Request[v1.SubmitRequest]) (*connect.Response[v1.SubmitResponse], error)
+	// Get looks up a single job by ID.
+	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
+	// Stats reports per-queue job counts by state.
+	Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error)
 	// Lease streams job assignments to a worker as they become available for the
 	// requested queue, up to max_in_flight concurrently-leased jobs at a time.
 	Lease(context.Context, *connect.Request[v1.LeaseRequest]) (*connect.ServerStreamForClient[v1.LeaseResponse], error)
 	// Ack marks a leased job as successfully completed.
 	Ack(context.Context, *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error)
 	// Nack marks a leased job as failed. The broker schedules it for retry with
-	// exponential backoff and jitter, or dead-letters it if max_retries is exhausted.
+	// exponential backoff and jitter, or dead-letters it once max_retries is
+	// exhausted.
 	Nack(context.Context, *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error)
-	// Heartbeat renews a job's lease so a long-running handler isn't reclaimed as if
-	// it had crashed.
+	// Heartbeat renews a job's lease so a long-running handler isn't reclaimed as
+	// if it had crashed.
 	Heartbeat(context.Context, *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error)
 }
 
-// NewBrokerClient constructs a client for the conveyor.v1.Broker service. By default, it uses the
-// Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
+// NewBrokerServiceClient constructs a client for the conveyor.v1.BrokerService service. By default,
+// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
+// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
+// or connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewBrokerClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BrokerClient {
+func NewBrokerServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BrokerServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	brokerMethods := v1.File_conveyor_v1_queue_proto.Services().ByName("Broker").Methods()
-	return &brokerClient{
+	brokerServiceMethods := v1.File_conveyor_v1_queue_proto.Services().ByName("BrokerService").Methods()
+	return &brokerServiceClient{
+		submit: connect.NewClient[v1.SubmitRequest, v1.SubmitResponse](
+			httpClient,
+			baseURL+BrokerServiceSubmitProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Submit")),
+			connect.WithClientOptions(opts...),
+		),
+		get: connect.NewClient[v1.GetRequest, v1.GetResponse](
+			httpClient,
+			baseURL+BrokerServiceGetProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Get")),
+			connect.WithClientOptions(opts...),
+		),
+		stats: connect.NewClient[v1.StatsRequest, v1.StatsResponse](
+			httpClient,
+			baseURL+BrokerServiceStatsProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Stats")),
+			connect.WithClientOptions(opts...),
+		),
 		lease: connect.NewClient[v1.LeaseRequest, v1.LeaseResponse](
 			httpClient,
-			baseURL+BrokerLeaseProcedure,
-			connect.WithSchema(brokerMethods.ByName("Lease")),
+			baseURL+BrokerServiceLeaseProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Lease")),
 			connect.WithClientOptions(opts...),
 		),
 		ack: connect.NewClient[v1.AckRequest, v1.AckResponse](
 			httpClient,
-			baseURL+BrokerAckProcedure,
-			connect.WithSchema(brokerMethods.ByName("Ack")),
+			baseURL+BrokerServiceAckProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Ack")),
 			connect.WithClientOptions(opts...),
 		),
 		nack: connect.NewClient[v1.NackRequest, v1.NackResponse](
 			httpClient,
-			baseURL+BrokerNackProcedure,
-			connect.WithSchema(brokerMethods.ByName("Nack")),
+			baseURL+BrokerServiceNackProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Nack")),
 			connect.WithClientOptions(opts...),
 		),
 		heartbeat: connect.NewClient[v1.HeartbeatRequest, v1.HeartbeatResponse](
 			httpClient,
-			baseURL+BrokerHeartbeatProcedure,
-			connect.WithSchema(brokerMethods.ByName("Heartbeat")),
+			baseURL+BrokerServiceHeartbeatProcedure,
+			connect.WithSchema(brokerServiceMethods.ByName("Heartbeat")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// brokerClient implements BrokerClient.
-type brokerClient struct {
+// brokerServiceClient implements BrokerServiceClient.
+type brokerServiceClient struct {
+	submit    *connect.Client[v1.SubmitRequest, v1.SubmitResponse]
+	get       *connect.Client[v1.GetRequest, v1.GetResponse]
+	stats     *connect.Client[v1.StatsRequest, v1.StatsResponse]
 	lease     *connect.Client[v1.LeaseRequest, v1.LeaseResponse]
 	ack       *connect.Client[v1.AckRequest, v1.AckResponse]
 	nack      *connect.Client[v1.NackRequest, v1.NackResponse]
 	heartbeat *connect.Client[v1.HeartbeatRequest, v1.HeartbeatResponse]
 }
 
-// Lease calls conveyor.v1.Broker.Lease.
-func (c *brokerClient) Lease(ctx context.Context, req *connect.Request[v1.LeaseRequest]) (*connect.ServerStreamForClient[v1.LeaseResponse], error) {
+// Submit calls conveyor.v1.BrokerService.Submit.
+func (c *brokerServiceClient) Submit(ctx context.Context, req *connect.Request[v1.SubmitRequest]) (*connect.Response[v1.SubmitResponse], error) {
+	return c.submit.CallUnary(ctx, req)
+}
+
+// Get calls conveyor.v1.BrokerService.Get.
+func (c *brokerServiceClient) Get(ctx context.Context, req *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error) {
+	return c.get.CallUnary(ctx, req)
+}
+
+// Stats calls conveyor.v1.BrokerService.Stats.
+func (c *brokerServiceClient) Stats(ctx context.Context, req *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error) {
+	return c.stats.CallUnary(ctx, req)
+}
+
+// Lease calls conveyor.v1.BrokerService.Lease.
+func (c *brokerServiceClient) Lease(ctx context.Context, req *connect.Request[v1.LeaseRequest]) (*connect.ServerStreamForClient[v1.LeaseResponse], error) {
 	return c.lease.CallServerStream(ctx, req)
 }
 
-// Ack calls conveyor.v1.Broker.Ack.
-func (c *brokerClient) Ack(ctx context.Context, req *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error) {
+// Ack calls conveyor.v1.BrokerService.Ack.
+func (c *brokerServiceClient) Ack(ctx context.Context, req *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error) {
 	return c.ack.CallUnary(ctx, req)
 }
 
-// Nack calls conveyor.v1.Broker.Nack.
-func (c *brokerClient) Nack(ctx context.Context, req *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error) {
+// Nack calls conveyor.v1.BrokerService.Nack.
+func (c *brokerServiceClient) Nack(ctx context.Context, req *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error) {
 	return c.nack.CallUnary(ctx, req)
 }
 
-// Heartbeat calls conveyor.v1.Broker.Heartbeat.
-func (c *brokerClient) Heartbeat(ctx context.Context, req *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error) {
+// Heartbeat calls conveyor.v1.BrokerService.Heartbeat.
+func (c *brokerServiceClient) Heartbeat(ctx context.Context, req *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error) {
 	return c.heartbeat.CallUnary(ctx, req)
 }
 
-// BrokerHandler is an implementation of the conveyor.v1.Broker service.
-type BrokerHandler interface {
+// BrokerServiceHandler is an implementation of the conveyor.v1.BrokerService service.
+type BrokerServiceHandler interface {
+	// Submit enqueues a job. If idempotency_key is set and a job with that key
+	// already exists on the queue, the existing job is returned and no new job is
+	// created.
+	Submit(context.Context, *connect.Request[v1.SubmitRequest]) (*connect.Response[v1.SubmitResponse], error)
+	// Get looks up a single job by ID.
+	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
+	// Stats reports per-queue job counts by state.
+	Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error)
 	// Lease streams job assignments to a worker as they become available for the
 	// requested queue, up to max_in_flight concurrently-leased jobs at a time.
 	Lease(context.Context, *connect.Request[v1.LeaseRequest], *connect.ServerStream[v1.LeaseResponse]) error
 	// Ack marks a leased job as successfully completed.
 	Ack(context.Context, *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error)
 	// Nack marks a leased job as failed. The broker schedules it for retry with
-	// exponential backoff and jitter, or dead-letters it if max_retries is exhausted.
+	// exponential backoff and jitter, or dead-letters it once max_retries is
+	// exhausted.
 	Nack(context.Context, *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error)
-	// Heartbeat renews a job's lease so a long-running handler isn't reclaimed as if
-	// it had crashed.
+	// Heartbeat renews a job's lease so a long-running handler isn't reclaimed as
+	// if it had crashed.
 	Heartbeat(context.Context, *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error)
 }
 
-// NewBrokerHandler builds an HTTP handler from the service implementation. It returns the path on
-// which to mount the handler and the handler itself.
+// NewBrokerServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewBrokerHandler(svc BrokerHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	brokerMethods := v1.File_conveyor_v1_queue_proto.Services().ByName("Broker").Methods()
-	brokerLeaseHandler := connect.NewServerStreamHandler(
-		BrokerLeaseProcedure,
+func NewBrokerServiceHandler(svc BrokerServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	brokerServiceMethods := v1.File_conveyor_v1_queue_proto.Services().ByName("BrokerService").Methods()
+	brokerServiceSubmitHandler := connect.NewUnaryHandler(
+		BrokerServiceSubmitProcedure,
+		svc.Submit,
+		connect.WithSchema(brokerServiceMethods.ByName("Submit")),
+		connect.WithHandlerOptions(opts...),
+	)
+	brokerServiceGetHandler := connect.NewUnaryHandler(
+		BrokerServiceGetProcedure,
+		svc.Get,
+		connect.WithSchema(brokerServiceMethods.ByName("Get")),
+		connect.WithHandlerOptions(opts...),
+	)
+	brokerServiceStatsHandler := connect.NewUnaryHandler(
+		BrokerServiceStatsProcedure,
+		svc.Stats,
+		connect.WithSchema(brokerServiceMethods.ByName("Stats")),
+		connect.WithHandlerOptions(opts...),
+	)
+	brokerServiceLeaseHandler := connect.NewServerStreamHandler(
+		BrokerServiceLeaseProcedure,
 		svc.Lease,
-		connect.WithSchema(brokerMethods.ByName("Lease")),
+		connect.WithSchema(brokerServiceMethods.ByName("Lease")),
 		connect.WithHandlerOptions(opts...),
 	)
-	brokerAckHandler := connect.NewUnaryHandler(
-		BrokerAckProcedure,
+	brokerServiceAckHandler := connect.NewUnaryHandler(
+		BrokerServiceAckProcedure,
 		svc.Ack,
-		connect.WithSchema(brokerMethods.ByName("Ack")),
+		connect.WithSchema(brokerServiceMethods.ByName("Ack")),
 		connect.WithHandlerOptions(opts...),
 	)
-	brokerNackHandler := connect.NewUnaryHandler(
-		BrokerNackProcedure,
+	brokerServiceNackHandler := connect.NewUnaryHandler(
+		BrokerServiceNackProcedure,
 		svc.Nack,
-		connect.WithSchema(brokerMethods.ByName("Nack")),
+		connect.WithSchema(brokerServiceMethods.ByName("Nack")),
 		connect.WithHandlerOptions(opts...),
 	)
-	brokerHeartbeatHandler := connect.NewUnaryHandler(
-		BrokerHeartbeatProcedure,
+	brokerServiceHeartbeatHandler := connect.NewUnaryHandler(
+		BrokerServiceHeartbeatProcedure,
 		svc.Heartbeat,
-		connect.WithSchema(brokerMethods.ByName("Heartbeat")),
+		connect.WithSchema(brokerServiceMethods.ByName("Heartbeat")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/conveyor.v1.Broker/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return "/conveyor.v1.BrokerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case BrokerLeaseProcedure:
-			brokerLeaseHandler.ServeHTTP(w, r)
-		case BrokerAckProcedure:
-			brokerAckHandler.ServeHTTP(w, r)
-		case BrokerNackProcedure:
-			brokerNackHandler.ServeHTTP(w, r)
-		case BrokerHeartbeatProcedure:
-			brokerHeartbeatHandler.ServeHTTP(w, r)
+		case BrokerServiceSubmitProcedure:
+			brokerServiceSubmitHandler.ServeHTTP(w, r)
+		case BrokerServiceGetProcedure:
+			brokerServiceGetHandler.ServeHTTP(w, r)
+		case BrokerServiceStatsProcedure:
+			brokerServiceStatsHandler.ServeHTTP(w, r)
+		case BrokerServiceLeaseProcedure:
+			brokerServiceLeaseHandler.ServeHTTP(w, r)
+		case BrokerServiceAckProcedure:
+			brokerServiceAckHandler.ServeHTTP(w, r)
+		case BrokerServiceNackProcedure:
+			brokerServiceNackHandler.ServeHTTP(w, r)
+		case BrokerServiceHeartbeatProcedure:
+			brokerServiceHeartbeatHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedBrokerHandler returns CodeUnimplemented from all methods.
-type UnimplementedBrokerHandler struct{}
+// UnimplementedBrokerServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBrokerServiceHandler struct{}
 
-func (UnimplementedBrokerHandler) Lease(context.Context, *connect.Request[v1.LeaseRequest], *connect.ServerStream[v1.LeaseResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.Broker.Lease is not implemented"))
+func (UnimplementedBrokerServiceHandler) Submit(context.Context, *connect.Request[v1.SubmitRequest]) (*connect.Response[v1.SubmitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Submit is not implemented"))
 }
 
-func (UnimplementedBrokerHandler) Ack(context.Context, *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.Broker.Ack is not implemented"))
+func (UnimplementedBrokerServiceHandler) Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Get is not implemented"))
 }
 
-func (UnimplementedBrokerHandler) Nack(context.Context, *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.Broker.Nack is not implemented"))
+func (UnimplementedBrokerServiceHandler) Stats(context.Context, *connect.Request[v1.StatsRequest]) (*connect.Response[v1.StatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Stats is not implemented"))
 }
 
-func (UnimplementedBrokerHandler) Heartbeat(context.Context, *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.Broker.Heartbeat is not implemented"))
+func (UnimplementedBrokerServiceHandler) Lease(context.Context, *connect.Request[v1.LeaseRequest], *connect.ServerStream[v1.LeaseResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Lease is not implemented"))
+}
+
+func (UnimplementedBrokerServiceHandler) Ack(context.Context, *connect.Request[v1.AckRequest]) (*connect.Response[v1.AckResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Ack is not implemented"))
+}
+
+func (UnimplementedBrokerServiceHandler) Nack(context.Context, *connect.Request[v1.NackRequest]) (*connect.Response[v1.NackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Nack is not implemented"))
+}
+
+func (UnimplementedBrokerServiceHandler) Heartbeat(context.Context, *connect.Request[v1.HeartbeatRequest]) (*connect.Response[v1.HeartbeatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("conveyor.v1.BrokerService.Heartbeat is not implemented"))
 }

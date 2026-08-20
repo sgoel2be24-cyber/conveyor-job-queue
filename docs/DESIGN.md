@@ -132,28 +132,36 @@ rejected if it's stale. Generated code lives in `internal/genproto/` (run
 Prometheus `/metrics`: enqueue rate, dispatch latency histogram, queue depth
 gauge, retry/failure counters. CLI: `status`, `dlq list`, `dlq replay`.
 
-## Benchmarks to capture (not aspirational — build these, then fill in real numbers)
+## Benchmarks
 
-1. **Crash-recovery integrity + speed.** Script 50-100 trials: submit N jobs
-   (10k-100k) → start consuming → `kill -9` the broker mid-write → restart →
-   assert recovered state exactly matches expected (zero lost) → record
-   replay latency.
-2. **Group-commit throughput.** Measure p50/p99 dispatch latency and
-   sustained enqueue rate with naive per-record `F_FULLFSYNC` first (expect
-   this to be the bottleneck — roughly one write per fsync round-trip on a
-   single writer), then with batched group-commit (batch N records or T ms,
-   one fsync, ack the batch), and report the gain against the added
-   worst-case latency.
-3. **Zombie-worker fencing test.** A deliberate test that delays a worker's
-   `Ack` past its lease expiry via a test hook, asserting the broker's epoch
-   check rejects the stale `Ack` rather than corrupting job state.
+Measured on Apple M5 / macOS 26.6 / APFS. Full tables in the
+[README](../README.md).
+
+1. **Crash-recovery integrity.** ✅ `scripts/crash_test.sh` — 50 `kill -9`
+   trials mid-burst: 4,003 acknowledged jobs, zero lost. Recovered counts
+   sometimes exceed acknowledged ones by exactly one (a submission logged in
+   the instant before death whose response never returned) — the at-least-once
+   contract, observed rather than assumed.
+2. **Recovery speed.** ✅ 100,000 records replayed in 7.7 ms (~77 ns/record).
+3. **Group-commit throughput.** ⏳ baseline measured, not yet wired in. One
+   `F_FULLFSYNC` per record costs 3.78 ms (~264 rec/s); encoding and writing
+   that record costs 1.29 µs. 99.97% of a durable write is waiting on the
+   drive. Amortizing one flush over 512 records drops the per-record cost to
+   10.6 µs — a 357× gain for a bounded latency window. Wiring this into the
+   submit path is Phase 3.
+4. **Zombie-worker fencing test.** ⏳ Phase 2. A deliberate test that delays a
+   worker's `Ack` past its lease expiry via a test hook, asserting the
+   broker's epoch check rejects the stale `Ack` rather than corrupting job
+   state.
 
 ## Build phases
 
 - [x] **Phase 0** — repo scaffolding, module, CI, proto schema, CLI skeleton.
-- [ ] **Phase 1** — WAL writer/reader (checksums, torn-write handling,
+- [x] **Phase 1** — WAL writer/reader (CRC32C checksums, torn-write handling,
       `F_FULLFSYNC`, segment rotation, snapshotting), in-memory index,
-      `broker start` / `submit`. Acceptance bar: crash-injection tests green.
+      idempotency keys, `broker start` / `submit` / `status` / `get`.
+      Acceptance bar met: torn-tail tests at every byte offset, plus 50 real
+      `kill -9` trials with zero acknowledged jobs lost.
 - [ ] **Phase 2** — Connect RPC `Lease`/`Ack`/`Nack`/`Heartbeat` with
       fencing, worker pool, lease timeout + heartbeat renewal, retry+backoff
       into the unified counter, DLQ, shell-exec handler (+ webhook handler).

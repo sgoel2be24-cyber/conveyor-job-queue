@@ -21,6 +21,704 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Priority int32
+
+const (
+	Priority_PRIORITY_UNSPECIFIED Priority = 0
+	Priority_PRIORITY_LOW         Priority = 1
+	Priority_PRIORITY_NORMAL      Priority = 2
+	Priority_PRIORITY_HIGH        Priority = 3
+)
+
+// Enum value maps for Priority.
+var (
+	Priority_name = map[int32]string{
+		0: "PRIORITY_UNSPECIFIED",
+		1: "PRIORITY_LOW",
+		2: "PRIORITY_NORMAL",
+		3: "PRIORITY_HIGH",
+	}
+	Priority_value = map[string]int32{
+		"PRIORITY_UNSPECIFIED": 0,
+		"PRIORITY_LOW":         1,
+		"PRIORITY_NORMAL":      2,
+		"PRIORITY_HIGH":        3,
+	}
+)
+
+func (x Priority) Enum() *Priority {
+	p := new(Priority)
+	*p = x
+	return p
+}
+
+func (x Priority) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Priority) Descriptor() protoreflect.EnumDescriptor {
+	return file_conveyor_v1_queue_proto_enumTypes[0].Descriptor()
+}
+
+func (Priority) Type() protoreflect.EnumType {
+	return &file_conveyor_v1_queue_proto_enumTypes[0]
+}
+
+func (x Priority) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Priority.Descriptor instead.
+func (Priority) EnumDescriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{0}
+}
+
+type JobState int32
+
+const (
+	JobState_JOB_STATE_UNSPECIFIED JobState = 0
+	JobState_JOB_STATE_PENDING     JobState = 1
+	JobState_JOB_STATE_LEASED      JobState = 2
+	JobState_JOB_STATE_RETRY_WAIT  JobState = 3
+	JobState_JOB_STATE_DONE        JobState = 4
+	JobState_JOB_STATE_DEAD_LETTER JobState = 5
+)
+
+// Enum value maps for JobState.
+var (
+	JobState_name = map[int32]string{
+		0: "JOB_STATE_UNSPECIFIED",
+		1: "JOB_STATE_PENDING",
+		2: "JOB_STATE_LEASED",
+		3: "JOB_STATE_RETRY_WAIT",
+		4: "JOB_STATE_DONE",
+		5: "JOB_STATE_DEAD_LETTER",
+	}
+	JobState_value = map[string]int32{
+		"JOB_STATE_UNSPECIFIED": 0,
+		"JOB_STATE_PENDING":     1,
+		"JOB_STATE_LEASED":      2,
+		"JOB_STATE_RETRY_WAIT":  3,
+		"JOB_STATE_DONE":        4,
+		"JOB_STATE_DEAD_LETTER": 5,
+	}
+)
+
+func (x JobState) Enum() *JobState {
+	p := new(JobState)
+	*p = x
+	return p
+}
+
+func (x JobState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (JobState) Descriptor() protoreflect.EnumDescriptor {
+	return file_conveyor_v1_queue_proto_enumTypes[1].Descriptor()
+}
+
+func (JobState) Type() protoreflect.EnumType {
+	return &file_conveyor_v1_queue_proto_enumTypes[1]
+}
+
+func (x JobState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use JobState.Descriptor instead.
+func (JobState) EnumDescriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
+type Job struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Id                   string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Queue                string                 `protobuf:"bytes,2,opt,name=queue,proto3" json:"queue,omitempty"`
+	Handler              string                 `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
+	Payload              []byte                 `protobuf:"bytes,4,opt,name=payload,proto3" json:"payload,omitempty"`
+	IdempotencyKey       string                 `protobuf:"bytes,5,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Priority             Priority               `protobuf:"varint,6,opt,name=priority,proto3,enum=conveyor.v1.Priority" json:"priority,omitempty"`
+	MaxRetries           int32                  `protobuf:"varint,7,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	Attempt              int32                  `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	State                JobState               `protobuf:"varint,9,opt,name=state,proto3,enum=conveyor.v1.JobState" json:"state,omitempty"`
+	Epoch                uint64                 `protobuf:"varint,10,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	EnqueuedAtUnixMs     int64                  `protobuf:"varint,11,opt,name=enqueued_at_unix_ms,json=enqueuedAtUnixMs,proto3" json:"enqueued_at_unix_ms,omitempty"`
+	EligibleAtUnixMs     int64                  `protobuf:"varint,12,opt,name=eligible_at_unix_ms,json=eligibleAtUnixMs,proto3" json:"eligible_at_unix_ms,omitempty"`
+	LeaseExpiresAtUnixMs int64                  `protobuf:"varint,13,opt,name=lease_expires_at_unix_ms,json=leaseExpiresAtUnixMs,proto3" json:"lease_expires_at_unix_ms,omitempty"`
+	LeasedBy             string                 `protobuf:"bytes,14,opt,name=leased_by,json=leasedBy,proto3" json:"leased_by,omitempty"`
+	LastError            string                 `protobuf:"bytes,15,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *Job) Reset() {
+	*x = Job{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Job) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Job) ProtoMessage() {}
+
+func (x *Job) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Job.ProtoReflect.Descriptor instead.
+func (*Job) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Job) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Job) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *Job) GetHandler() string {
+	if x != nil {
+		return x.Handler
+	}
+	return ""
+}
+
+func (x *Job) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *Job) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *Job) GetPriority() Priority {
+	if x != nil {
+		return x.Priority
+	}
+	return Priority_PRIORITY_UNSPECIFIED
+}
+
+func (x *Job) GetMaxRetries() int32 {
+	if x != nil {
+		return x.MaxRetries
+	}
+	return 0
+}
+
+func (x *Job) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+func (x *Job) GetState() JobState {
+	if x != nil {
+		return x.State
+	}
+	return JobState_JOB_STATE_UNSPECIFIED
+}
+
+func (x *Job) GetEpoch() uint64 {
+	if x != nil {
+		return x.Epoch
+	}
+	return 0
+}
+
+func (x *Job) GetEnqueuedAtUnixMs() int64 {
+	if x != nil {
+		return x.EnqueuedAtUnixMs
+	}
+	return 0
+}
+
+func (x *Job) GetEligibleAtUnixMs() int64 {
+	if x != nil {
+		return x.EligibleAtUnixMs
+	}
+	return 0
+}
+
+func (x *Job) GetLeaseExpiresAtUnixMs() int64 {
+	if x != nil {
+		return x.LeaseExpiresAtUnixMs
+	}
+	return 0
+}
+
+func (x *Job) GetLeasedBy() string {
+	if x != nil {
+		return x.LeasedBy
+	}
+	return ""
+}
+
+func (x *Job) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+type SubmitRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Queue          string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	Payload        []byte                 `protobuf:"bytes,2,opt,name=payload,proto3" json:"payload,omitempty"`
+	Handler        string                 `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Priority       Priority               `protobuf:"varint,5,opt,name=priority,proto3,enum=conveyor.v1.Priority" json:"priority,omitempty"`
+	MaxRetries     int32                  `protobuf:"varint,6,opt,name=max_retries,json=maxRetries,proto3" json:"max_retries,omitempty"`
+	DelayMs        int64                  `protobuf:"varint,7,opt,name=delay_ms,json=delayMs,proto3" json:"delay_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SubmitRequest) Reset() {
+	*x = SubmitRequest{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRequest) ProtoMessage() {}
+
+func (x *SubmitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRequest.ProtoReflect.Descriptor instead.
+func (*SubmitRequest) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *SubmitRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *SubmitRequest) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *SubmitRequest) GetHandler() string {
+	if x != nil {
+		return x.Handler
+	}
+	return ""
+}
+
+func (x *SubmitRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *SubmitRequest) GetPriority() Priority {
+	if x != nil {
+		return x.Priority
+	}
+	return Priority_PRIORITY_UNSPECIFIED
+}
+
+func (x *SubmitRequest) GetMaxRetries() int32 {
+	if x != nil {
+		return x.MaxRetries
+	}
+	return 0
+}
+
+func (x *SubmitRequest) GetDelayMs() int64 {
+	if x != nil {
+		return x.DelayMs
+	}
+	return 0
+}
+
+type SubmitResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	JobId string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	// deduplicated is true when idempotency_key matched an existing job, meaning
+	// no new job was enqueued.
+	Deduplicated  bool `protobuf:"varint,2,opt,name=deduplicated,proto3" json:"deduplicated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitResponse) Reset() {
+	*x = SubmitResponse{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitResponse) ProtoMessage() {}
+
+func (x *SubmitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitResponse.ProtoReflect.Descriptor instead.
+func (*SubmitResponse) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SubmitResponse) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+func (x *SubmitResponse) GetDeduplicated() bool {
+	if x != nil {
+		return x.Deduplicated
+	}
+	return false
+}
+
+type GetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRequest) Reset() {
+	*x = GetRequest{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRequest) ProtoMessage() {}
+
+func (x *GetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
+func (*GetRequest) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetRequest) GetJobId() string {
+	if x != nil {
+		return x.JobId
+	}
+	return ""
+}
+
+type GetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	Job           *Job                   `protobuf:"bytes,2,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetResponse) Reset() {
+	*x = GetResponse{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetResponse) ProtoMessage() {}
+
+func (x *GetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetResponse.ProtoReflect.Descriptor instead.
+func (*GetResponse) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *GetResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
+type StatsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// queue optionally restricts the report to a single queue.
+	Queue         string `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatsRequest) Reset() {
+	*x = StatsRequest{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsRequest) ProtoMessage() {}
+
+func (x *StatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsRequest.ProtoReflect.Descriptor instead.
+func (*StatsRequest) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *StatsRequest) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+type QueueStats struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
+	Pending       int64                  `protobuf:"varint,2,opt,name=pending,proto3" json:"pending,omitempty"`
+	Leased        int64                  `protobuf:"varint,3,opt,name=leased,proto3" json:"leased,omitempty"`
+	RetryWait     int64                  `protobuf:"varint,4,opt,name=retry_wait,json=retryWait,proto3" json:"retry_wait,omitempty"`
+	Done          int64                  `protobuf:"varint,5,opt,name=done,proto3" json:"done,omitempty"`
+	DeadLetter    int64                  `protobuf:"varint,6,opt,name=dead_letter,json=deadLetter,proto3" json:"dead_letter,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueueStats) Reset() {
+	*x = QueueStats{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueueStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueueStats) ProtoMessage() {}
+
+func (x *QueueStats) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueueStats.ProtoReflect.Descriptor instead.
+func (*QueueStats) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *QueueStats) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *QueueStats) GetPending() int64 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *QueueStats) GetLeased() int64 {
+	if x != nil {
+		return x.Leased
+	}
+	return 0
+}
+
+func (x *QueueStats) GetRetryWait() int64 {
+	if x != nil {
+		return x.RetryWait
+	}
+	return 0
+}
+
+func (x *QueueStats) GetDone() int64 {
+	if x != nil {
+		return x.Done
+	}
+	return 0
+}
+
+func (x *QueueStats) GetDeadLetter() int64 {
+	if x != nil {
+		return x.DeadLetter
+	}
+	return 0
+}
+
+type StatsResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Queues    []*QueueStats          `protobuf:"bytes,1,rep,name=queues,proto3" json:"queues,omitempty"`
+	TotalJobs int64                  `protobuf:"varint,2,opt,name=total_jobs,json=totalJobs,proto3" json:"total_jobs,omitempty"`
+	// last_lsn is the sequence number of the most recent durably-logged event.
+	LastLsn       uint64 `protobuf:"varint,3,opt,name=last_lsn,json=lastLsn,proto3" json:"last_lsn,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatsResponse) Reset() {
+	*x = StatsResponse{}
+	mi := &file_conveyor_v1_queue_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatsResponse) ProtoMessage() {}
+
+func (x *StatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_conveyor_v1_queue_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatsResponse.ProtoReflect.Descriptor instead.
+func (*StatsResponse) Descriptor() ([]byte, []int) {
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StatsResponse) GetQueues() []*QueueStats {
+	if x != nil {
+		return x.Queues
+	}
+	return nil
+}
+
+func (x *StatsResponse) GetTotalJobs() int64 {
+	if x != nil {
+		return x.TotalJobs
+	}
+	return 0
+}
+
+func (x *StatsResponse) GetLastLsn() uint64 {
+	if x != nil {
+		return x.LastLsn
+	}
+	return 0
+}
+
 type LeaseRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
@@ -32,7 +730,7 @@ type LeaseRequest struct {
 
 func (x *LeaseRequest) Reset() {
 	*x = LeaseRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[0]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +742,7 @@ func (x *LeaseRequest) String() string {
 func (*LeaseRequest) ProtoMessage() {}
 
 func (x *LeaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[0]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +755,7 @@ func (x *LeaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseRequest.ProtoReflect.Descriptor instead.
 func (*LeaseRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{0}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *LeaseRequest) GetQueue() string {
@@ -84,7 +782,7 @@ func (x *LeaseRequest) GetMaxInFlight() int32 {
 type LeaseResponse struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	JobId                string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Epoch                int64                  `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	Epoch                uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	IdempotencyKey       string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	Handler              string                 `protobuf:"bytes,4,opt,name=handler,proto3" json:"handler,omitempty"`
 	Payload              []byte                 `protobuf:"bytes,5,opt,name=payload,proto3" json:"payload,omitempty"`
@@ -96,7 +794,7 @@ type LeaseResponse struct {
 
 func (x *LeaseResponse) Reset() {
 	*x = LeaseResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[1]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -108,7 +806,7 @@ func (x *LeaseResponse) String() string {
 func (*LeaseResponse) ProtoMessage() {}
 
 func (x *LeaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[1]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -121,7 +819,7 @@ func (x *LeaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaseResponse.ProtoReflect.Descriptor instead.
 func (*LeaseResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{1}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *LeaseResponse) GetJobId() string {
@@ -131,7 +829,7 @@ func (x *LeaseResponse) GetJobId() string {
 	return ""
 }
 
-func (x *LeaseResponse) GetEpoch() int64 {
+func (x *LeaseResponse) GetEpoch() uint64 {
 	if x != nil {
 		return x.Epoch
 	}
@@ -176,7 +874,7 @@ func (x *LeaseResponse) GetLeaseExpiresAtUnixMs() int64 {
 type AckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Epoch         int64                  `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	Epoch         uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	WorkerId      string                 `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -184,7 +882,7 @@ type AckRequest struct {
 
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[2]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -196,7 +894,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[2]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -209,7 +907,7 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{2}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AckRequest) GetJobId() string {
@@ -219,7 +917,7 @@ func (x *AckRequest) GetJobId() string {
 	return ""
 }
 
-func (x *AckRequest) GetEpoch() int64 {
+func (x *AckRequest) GetEpoch() uint64 {
 	if x != nil {
 		return x.Epoch
 	}
@@ -235,8 +933,9 @@ func (x *AckRequest) GetWorkerId() string {
 
 type AckResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// accepted is false when epoch is stale, meaning the job was already reclaimed
-	// and reassigned; the caller's work was not credited and should be discarded.
+	// accepted is false when the epoch is stale, meaning the job was already
+	// reclaimed and reassigned; the caller's work was not credited and any result
+	// it produced should be discarded.
 	Accepted      bool `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -244,7 +943,7 @@ type AckResponse struct {
 
 func (x *AckResponse) Reset() {
 	*x = AckResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[3]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -256,7 +955,7 @@ func (x *AckResponse) String() string {
 func (*AckResponse) ProtoMessage() {}
 
 func (x *AckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[3]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -269,7 +968,7 @@ func (x *AckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckResponse.ProtoReflect.Descriptor instead.
 func (*AckResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{3}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AckResponse) GetAccepted() bool {
@@ -282,7 +981,7 @@ func (x *AckResponse) GetAccepted() bool {
 type NackRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Epoch         int64                  `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	Epoch         uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	WorkerId      string                 `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -291,7 +990,7 @@ type NackRequest struct {
 
 func (x *NackRequest) Reset() {
 	*x = NackRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[4]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +1002,7 @@ func (x *NackRequest) String() string {
 func (*NackRequest) ProtoMessage() {}
 
 func (x *NackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[4]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +1015,7 @@ func (x *NackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
 func (*NackRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{4}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *NackRequest) GetJobId() string {
@@ -326,7 +1025,7 @@ func (x *NackRequest) GetJobId() string {
 	return ""
 }
 
-func (x *NackRequest) GetEpoch() int64 {
+func (x *NackRequest) GetEpoch() uint64 {
 	if x != nil {
 		return x.Epoch
 	}
@@ -357,7 +1056,7 @@ type NackResponse struct {
 
 func (x *NackResponse) Reset() {
 	*x = NackResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[5]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +1068,7 @@ func (x *NackResponse) String() string {
 func (*NackResponse) ProtoMessage() {}
 
 func (x *NackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[5]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +1081,7 @@ func (x *NackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackResponse.ProtoReflect.Descriptor instead.
 func (*NackResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{5}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *NackResponse) GetAccepted() bool {
@@ -402,7 +1101,7 @@ func (x *NackResponse) GetDeadLettered() bool {
 type HeartbeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	Epoch         int64                  `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	Epoch         uint64                 `protobuf:"varint,2,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	WorkerId      string                 `protobuf:"bytes,3,opt,name=worker_id,json=workerId,proto3" json:"worker_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -410,7 +1109,7 @@ type HeartbeatRequest struct {
 
 func (x *HeartbeatRequest) Reset() {
 	*x = HeartbeatRequest{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[6]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +1121,7 @@ func (x *HeartbeatRequest) String() string {
 func (*HeartbeatRequest) ProtoMessage() {}
 
 func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[6]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +1134,7 @@ func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{6}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HeartbeatRequest) GetJobId() string {
@@ -445,7 +1144,7 @@ func (x *HeartbeatRequest) GetJobId() string {
 	return ""
 }
 
-func (x *HeartbeatRequest) GetEpoch() int64 {
+func (x *HeartbeatRequest) GetEpoch() uint64 {
 	if x != nil {
 		return x.Epoch
 	}
@@ -469,7 +1168,7 @@ type HeartbeatResponse struct {
 
 func (x *HeartbeatResponse) Reset() {
 	*x = HeartbeatResponse{}
-	mi := &file_conveyor_v1_queue_proto_msgTypes[7]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +1180,7 @@ func (x *HeartbeatResponse) String() string {
 func (*HeartbeatResponse) ProtoMessage() {}
 
 func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_conveyor_v1_queue_proto_msgTypes[7]
+	mi := &file_conveyor_v1_queue_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +1193,7 @@ func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{7}
+	return file_conveyor_v1_queue_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HeartbeatResponse) GetAccepted() bool {
@@ -515,14 +1214,68 @@ var File_conveyor_v1_queue_proto protoreflect.FileDescriptor
 
 const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\n" +
-	"\x17conveyor/v1/queue.proto\x12\vconveyor.v1\"e\n" +
+	"\x17conveyor/v1/queue.proto\x12\vconveyor.v1\"\x8b\x04\n" +
+	"\x03Job\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05queue\x18\x02 \x01(\tR\x05queue\x12\x18\n" +
+	"\ahandler\x18\x03 \x01(\tR\ahandler\x12\x18\n" +
+	"\apayload\x18\x04 \x01(\fR\apayload\x12'\n" +
+	"\x0fidempotency_key\x18\x05 \x01(\tR\x0eidempotencyKey\x121\n" +
+	"\bpriority\x18\x06 \x01(\x0e2\x15.conveyor.v1.PriorityR\bpriority\x12\x1f\n" +
+	"\vmax_retries\x18\a \x01(\x05R\n" +
+	"maxRetries\x12\x18\n" +
+	"\aattempt\x18\b \x01(\x05R\aattempt\x12+\n" +
+	"\x05state\x18\t \x01(\x0e2\x15.conveyor.v1.JobStateR\x05state\x12\x14\n" +
+	"\x05epoch\x18\n" +
+	" \x01(\x04R\x05epoch\x12-\n" +
+	"\x13enqueued_at_unix_ms\x18\v \x01(\x03R\x10enqueuedAtUnixMs\x12-\n" +
+	"\x13eligible_at_unix_ms\x18\f \x01(\x03R\x10eligibleAtUnixMs\x126\n" +
+	"\x18lease_expires_at_unix_ms\x18\r \x01(\x03R\x14leaseExpiresAtUnixMs\x12\x1b\n" +
+	"\tleased_by\x18\x0e \x01(\tR\bleasedBy\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\x0f \x01(\tR\tlastError\"\xf1\x01\n" +
+	"\rSubmitRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x18\n" +
+	"\apayload\x18\x02 \x01(\fR\apayload\x12\x18\n" +
+	"\ahandler\x18\x03 \x01(\tR\ahandler\x12'\n" +
+	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x121\n" +
+	"\bpriority\x18\x05 \x01(\x0e2\x15.conveyor.v1.PriorityR\bpriority\x12\x1f\n" +
+	"\vmax_retries\x18\x06 \x01(\x05R\n" +
+	"maxRetries\x12\x19\n" +
+	"\bdelay_ms\x18\a \x01(\x03R\adelayMs\"K\n" +
+	"\x0eSubmitResponse\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\"\n" +
+	"\fdeduplicated\x18\x02 \x01(\bR\fdeduplicated\"#\n" +
+	"\n" +
+	"GetRequest\x12\x15\n" +
+	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"G\n" +
+	"\vGetResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x01(\bR\x05found\x12\"\n" +
+	"\x03job\x18\x02 \x01(\v2\x10.conveyor.v1.JobR\x03job\"$\n" +
+	"\fStatsRequest\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\"\xa8\x01\n" +
+	"\n" +
+	"QueueStats\x12\x14\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x18\n" +
+	"\apending\x18\x02 \x01(\x03R\apending\x12\x16\n" +
+	"\x06leased\x18\x03 \x01(\x03R\x06leased\x12\x1d\n" +
+	"\n" +
+	"retry_wait\x18\x04 \x01(\x03R\tretryWait\x12\x12\n" +
+	"\x04done\x18\x05 \x01(\x03R\x04done\x12\x1f\n" +
+	"\vdead_letter\x18\x06 \x01(\x03R\n" +
+	"deadLetter\"z\n" +
+	"\rStatsResponse\x12/\n" +
+	"\x06queues\x18\x01 \x03(\v2\x17.conveyor.v1.QueueStatsR\x06queues\x12\x1d\n" +
+	"\n" +
+	"total_jobs\x18\x02 \x01(\x03R\ttotalJobs\x12\x19\n" +
+	"\blast_lsn\x18\x03 \x01(\x04R\alastLsn\"e\n" +
 	"\fLeaseRequest\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1b\n" +
 	"\tworker_id\x18\x02 \x01(\tR\bworkerId\x12\"\n" +
 	"\rmax_in_flight\x18\x03 \x01(\x05R\vmaxInFlight\"\xeb\x01\n" +
 	"\rLeaseResponse\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
-	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\x12'\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12'\n" +
 	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x12\x18\n" +
 	"\ahandler\x18\x04 \x01(\tR\ahandler\x12\x18\n" +
 	"\apayload\x18\x05 \x01(\fR\apayload\x12\x18\n" +
@@ -531,13 +1284,13 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\n" +
 	"AckRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
-	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\x12\x1b\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x1b\n" +
 	"\tworker_id\x18\x03 \x01(\tR\bworkerId\")\n" +
 	"\vAckResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\"o\n" +
 	"\vNackRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
-	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\x12\x1b\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x1b\n" +
 	"\tworker_id\x18\x03 \x01(\tR\bworkerId\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"O\n" +
 	"\fNackResponse\x12\x1a\n" +
@@ -545,12 +1298,27 @@ const file_conveyor_v1_queue_proto_rawDesc = "" +
 	"\rdead_lettered\x18\x02 \x01(\bR\fdeadLettered\"\\\n" +
 	"\x10HeartbeatRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12\x14\n" +
-	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\x12\x1b\n" +
+	"\x05epoch\x18\x02 \x01(\x04R\x05epoch\x12\x1b\n" +
 	"\tworker_id\x18\x03 \x01(\tR\bworkerId\"n\n" +
 	"\x11HeartbeatResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12=\n" +
-	"\x1cnew_lease_expires_at_unix_ms\x18\x02 \x01(\x03R\x17newLeaseExpiresAtUnixMs2\x8d\x02\n" +
-	"\x06Broker\x12@\n" +
+	"\x1cnew_lease_expires_at_unix_ms\x18\x02 \x01(\x03R\x17newLeaseExpiresAtUnixMs*^\n" +
+	"\bPriority\x12\x18\n" +
+	"\x14PRIORITY_UNSPECIFIED\x10\x00\x12\x10\n" +
+	"\fPRIORITY_LOW\x10\x01\x12\x13\n" +
+	"\x0fPRIORITY_NORMAL\x10\x02\x12\x11\n" +
+	"\rPRIORITY_HIGH\x10\x03*\x9b\x01\n" +
+	"\bJobState\x12\x19\n" +
+	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11JOB_STATE_PENDING\x10\x01\x12\x14\n" +
+	"\x10JOB_STATE_LEASED\x10\x02\x12\x18\n" +
+	"\x14JOB_STATE_RETRY_WAIT\x10\x03\x12\x12\n" +
+	"\x0eJOB_STATE_DONE\x10\x04\x12\x19\n" +
+	"\x15JOB_STATE_DEAD_LETTER\x10\x052\xd1\x03\n" +
+	"\rBrokerService\x12A\n" +
+	"\x06Submit\x12\x1a.conveyor.v1.SubmitRequest\x1a\x1b.conveyor.v1.SubmitResponse\x128\n" +
+	"\x03Get\x12\x17.conveyor.v1.GetRequest\x1a\x18.conveyor.v1.GetResponse\x12>\n" +
+	"\x05Stats\x12\x19.conveyor.v1.StatsRequest\x1a\x1a.conveyor.v1.StatsResponse\x12@\n" +
 	"\x05Lease\x12\x19.conveyor.v1.LeaseRequest\x1a\x1a.conveyor.v1.LeaseResponse0\x01\x128\n" +
 	"\x03Ack\x12\x17.conveyor.v1.AckRequest\x1a\x18.conveyor.v1.AckResponse\x12;\n" +
 	"\x04Nack\x12\x18.conveyor.v1.NackRequest\x1a\x19.conveyor.v1.NackResponse\x12J\n" +
@@ -568,31 +1336,53 @@ func file_conveyor_v1_queue_proto_rawDescGZIP() []byte {
 	return file_conveyor_v1_queue_proto_rawDescData
 }
 
-var file_conveyor_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_conveyor_v1_queue_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_conveyor_v1_queue_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_conveyor_v1_queue_proto_goTypes = []any{
-	(*LeaseRequest)(nil),      // 0: conveyor.v1.LeaseRequest
-	(*LeaseResponse)(nil),     // 1: conveyor.v1.LeaseResponse
-	(*AckRequest)(nil),        // 2: conveyor.v1.AckRequest
-	(*AckResponse)(nil),       // 3: conveyor.v1.AckResponse
-	(*NackRequest)(nil),       // 4: conveyor.v1.NackRequest
-	(*NackResponse)(nil),      // 5: conveyor.v1.NackResponse
-	(*HeartbeatRequest)(nil),  // 6: conveyor.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil), // 7: conveyor.v1.HeartbeatResponse
+	(Priority)(0),             // 0: conveyor.v1.Priority
+	(JobState)(0),             // 1: conveyor.v1.JobState
+	(*Job)(nil),               // 2: conveyor.v1.Job
+	(*SubmitRequest)(nil),     // 3: conveyor.v1.SubmitRequest
+	(*SubmitResponse)(nil),    // 4: conveyor.v1.SubmitResponse
+	(*GetRequest)(nil),        // 5: conveyor.v1.GetRequest
+	(*GetResponse)(nil),       // 6: conveyor.v1.GetResponse
+	(*StatsRequest)(nil),      // 7: conveyor.v1.StatsRequest
+	(*QueueStats)(nil),        // 8: conveyor.v1.QueueStats
+	(*StatsResponse)(nil),     // 9: conveyor.v1.StatsResponse
+	(*LeaseRequest)(nil),      // 10: conveyor.v1.LeaseRequest
+	(*LeaseResponse)(nil),     // 11: conveyor.v1.LeaseResponse
+	(*AckRequest)(nil),        // 12: conveyor.v1.AckRequest
+	(*AckResponse)(nil),       // 13: conveyor.v1.AckResponse
+	(*NackRequest)(nil),       // 14: conveyor.v1.NackRequest
+	(*NackResponse)(nil),      // 15: conveyor.v1.NackResponse
+	(*HeartbeatRequest)(nil),  // 16: conveyor.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil), // 17: conveyor.v1.HeartbeatResponse
 }
 var file_conveyor_v1_queue_proto_depIdxs = []int32{
-	0, // 0: conveyor.v1.Broker.Lease:input_type -> conveyor.v1.LeaseRequest
-	2, // 1: conveyor.v1.Broker.Ack:input_type -> conveyor.v1.AckRequest
-	4, // 2: conveyor.v1.Broker.Nack:input_type -> conveyor.v1.NackRequest
-	6, // 3: conveyor.v1.Broker.Heartbeat:input_type -> conveyor.v1.HeartbeatRequest
-	1, // 4: conveyor.v1.Broker.Lease:output_type -> conveyor.v1.LeaseResponse
-	3, // 5: conveyor.v1.Broker.Ack:output_type -> conveyor.v1.AckResponse
-	5, // 6: conveyor.v1.Broker.Nack:output_type -> conveyor.v1.NackResponse
-	7, // 7: conveyor.v1.Broker.Heartbeat:output_type -> conveyor.v1.HeartbeatResponse
-	4, // [4:8] is the sub-list for method output_type
-	0, // [0:4] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0,  // 0: conveyor.v1.Job.priority:type_name -> conveyor.v1.Priority
+	1,  // 1: conveyor.v1.Job.state:type_name -> conveyor.v1.JobState
+	0,  // 2: conveyor.v1.SubmitRequest.priority:type_name -> conveyor.v1.Priority
+	2,  // 3: conveyor.v1.GetResponse.job:type_name -> conveyor.v1.Job
+	8,  // 4: conveyor.v1.StatsResponse.queues:type_name -> conveyor.v1.QueueStats
+	3,  // 5: conveyor.v1.BrokerService.Submit:input_type -> conveyor.v1.SubmitRequest
+	5,  // 6: conveyor.v1.BrokerService.Get:input_type -> conveyor.v1.GetRequest
+	7,  // 7: conveyor.v1.BrokerService.Stats:input_type -> conveyor.v1.StatsRequest
+	10, // 8: conveyor.v1.BrokerService.Lease:input_type -> conveyor.v1.LeaseRequest
+	12, // 9: conveyor.v1.BrokerService.Ack:input_type -> conveyor.v1.AckRequest
+	14, // 10: conveyor.v1.BrokerService.Nack:input_type -> conveyor.v1.NackRequest
+	16, // 11: conveyor.v1.BrokerService.Heartbeat:input_type -> conveyor.v1.HeartbeatRequest
+	4,  // 12: conveyor.v1.BrokerService.Submit:output_type -> conveyor.v1.SubmitResponse
+	6,  // 13: conveyor.v1.BrokerService.Get:output_type -> conveyor.v1.GetResponse
+	9,  // 14: conveyor.v1.BrokerService.Stats:output_type -> conveyor.v1.StatsResponse
+	11, // 15: conveyor.v1.BrokerService.Lease:output_type -> conveyor.v1.LeaseResponse
+	13, // 16: conveyor.v1.BrokerService.Ack:output_type -> conveyor.v1.AckResponse
+	15, // 17: conveyor.v1.BrokerService.Nack:output_type -> conveyor.v1.NackResponse
+	17, // 18: conveyor.v1.BrokerService.Heartbeat:output_type -> conveyor.v1.HeartbeatResponse
+	12, // [12:19] is the sub-list for method output_type
+	5,  // [5:12] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_conveyor_v1_queue_proto_init() }
@@ -605,13 +1395,14 @@ func file_conveyor_v1_queue_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_conveyor_v1_queue_proto_rawDesc), len(file_conveyor_v1_queue_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      2,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_conveyor_v1_queue_proto_goTypes,
 		DependencyIndexes: file_conveyor_v1_queue_proto_depIdxs,
+		EnumInfos:         file_conveyor_v1_queue_proto_enumTypes,
 		MessageInfos:      file_conveyor_v1_queue_proto_msgTypes,
 	}.Build()
 	File_conveyor_v1_queue_proto = out.File
