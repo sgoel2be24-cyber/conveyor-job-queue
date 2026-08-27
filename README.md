@@ -1,5 +1,12 @@
 # Conveyor
 
+[![crash-safety](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsgoel2be24-cyber%2Fconveyor-job-queue%2Fbadges%2Fcrash-safety.json)](https://github.com/sgoel2be24-cyber/conveyor-job-queue/actions/workflows/verify.yml)
+[![throughput](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsgoel2be24-cyber%2Fconveyor-job-queue%2Fbadges%2Fthroughput.json)](https://github.com/sgoel2be24-cyber/conveyor-job-queue/actions/workflows/verify.yml)
+[![last verified](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsgoel2be24-cyber%2Fconveyor-job-queue%2Fbadges%2Fverified.json)](https://github.com/sgoel2be24-cyber/conveyor-job-queue/actions/workflows/verify.yml)
+
+<sub>Both numbers are re-measured by CI, not typed here. Throughput is a GitHub
+runner, not the M5 in the results table below — it is a regression signal.</sub>
+
 A durable, distributed job-processing pipeline — a from-scratch, scoped-down
 version of the class of system Celery, Sidekiq, and SQS+workers occupy.
 Producers submit jobs from the CLI; a broker persists them to a hand-rolled
