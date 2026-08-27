@@ -1,0 +1,125 @@
+name: verify
+
+# Re-measures the two claims the README makes, so they are produced by a machine
+# on a date rather than remembered from a laptop run.
+#
+#   crash-safety — hardware-independent. The invariant producers are promised:
+#                  a job whose Submit returned survives a kill -9.
+#   throughput   — hardware-DEPENDENT. A GitHub runner is not an M5 with an
+#                  internal SSD, so this number is deliberately labelled "CI"
+#                  and is not the 32,232/s in the README's results table. It is
+#                  useful as a regression signal, not as a headline figure.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'internal/**'
+      - 'cmd/**'
+      - 'scripts/crash_test.sh'
+      - '.github/workflows/verify.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # macos-latest for the same reason ci.yml uses it: the durability path is
+    # Darwin-specific (F_FULLFSYNC, not plain fsync).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+
+      - name: Build
+        run: go build -o bin/conveyor ./cmd/conveyor
+
+      - name: Crash-recovery trials
+        id: crash
+        run: |
+          set -o pipefail
+          TRIALS=20 JOBS=2000 scripts/crash_test.sh 2>&1 | tee crash.log
+          line="$(grep -E '^PASS:' crash.log || true)"
+          trials="$(printf '%s' "$line" | grep -oE '[0-9]+ trials' | grep -oE '[0-9]+' || echo 0)"
+          acked="$(printf '%s' "$line" | grep -oE '[0-9]+ acknowledged' | grep -oE '[0-9]+' || echo 0)"
+          if [ -z "$line" ]; then
+            echo "message=trials failed" >> "$GITHUB_OUTPUT"
+            echo "color=b03a1a" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "message=${trials} kill -9 trials · ${acked} jobs · 0 lost" >> "$GITHUB_OUTPUT"
+          echo "color=0b7d73" >> "$GITHUB_OUTPUT"
+
+      - name: Throughput under group commit
+        id: bench
+        run: |
+          set -o pipefail
+          rm -rf ./benchdata && mkdir -p ./benchdata
+          ./bin/conveyor broker start --data-dir ./benchdata > broker.log 2>&1 &
+          echo $! > broker.pid
+
+          # Wait for the broker to accept RPCs rather than sleeping a guess.
+          ready=0
+          for _ in $(seq 1 40); do
+            if ./bin/conveyor status > /dev/null 2>&1; then ready=1; break; fi
+            sleep 0.5
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "broker did not become ready" >&2
+            cat broker.log >&2
+            kill "$(cat broker.pid)" 2>/dev/null || true
+            echo "message=unavailable" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ./bin/conveyor bench --concurrency 256 --duration 10s 2>&1 | tee bench.log
+          kill "$(cat broker.pid)" 2>/dev/null || true
+
+          # Permissive on purpose: takes the first integer that looks like a
+          # per-second rate. If `conveyor bench` changes its output format this
+          # degrades to "unavailable" instead of publishing a wrong number.
+          rate="$(grep -oiE '[0-9][0-9,\.]*[[:space:]]*(/s|per second|submissions/s|ops/s)' bench.log | head -n1 | grep -oE '[0-9][0-9,\.]*' || true)"
+          if [ -z "$rate" ]; then
+            echo "message=unavailable" >> "$GITHUB_OUTPUT"
+          else
+            echo "message=${rate}/s @ 256 submitters (CI runner)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish badge endpoints
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          set -e
+          stamp="$(date -u +'%Y-%m-%d')"
+          rm -rf .badges && mkdir .badges
+          cd .badges
+          git init -q
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth 1 origin badges 2>/dev/null; then
+            git checkout -q FETCH_HEAD -- . 2>/dev/null || true
+            git checkout -qb badges
+          else
+            git checkout -qb badges
+          fi
+
+          write_badge () {
+            printf '{"schemaVersion":1,"label":"%s","message":"%s","color":"%s"}\n' "$1" "$2" "$3" > "$4"
+          }
+
+          write_badge "crash-safety" "${{ steps.crash.outputs.message }}" "${{ steps.crash.outputs.color || 'b03a1a' }}" crash-safety.json
+          write_badge "throughput" "${{ steps.bench.outputs.message }}" "203a43" throughput.json
+          write_badge "last verified" "$stamp" "6f7c7a" verified.json
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "verify: ${stamp}" || { echo "nothing changed"; exit 0; }
+          git push -q --force origin badges
