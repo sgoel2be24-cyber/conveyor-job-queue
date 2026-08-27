@@ -84,14 +84,15 @@ jobs:
           ./bin/conveyor bench --concurrency 256 --duration 10s 2>&1 | tee bench.log
           kill "$(cat broker.pid)" 2>/dev/null || true
 
-          # Permissive on purpose: takes the first integer that looks like a
-          # per-second rate. If `conveyor bench` changes its output format this
-          # degrades to "unavailable" instead of publishing a wrong number.
-          rate="$(grep -oiE '[0-9][0-9,\.]*[[:space:]]*(/s|per second|submissions/s|ops/s)' bench.log | head -n1 | grep -oE '[0-9][0-9,\.]*' || true)"
+          # `conveyor bench` prints:  throughput     11331.8 jobs/sec
+          # Anchored to that line rather than to any number that looks rate-ish.
+          # If the output format changes this degrades to "unavailable" instead
+          # of publishing a wrong number.
+          rate="$(grep -oiE '^[[:space:]]*throughput[[:space:]]+[0-9][0-9,.]*' bench.log | head -n1 | grep -oE '[0-9][0-9,.]*' || true)"
           if [ -z "$rate" ]; then
             echo "message=unavailable" >> "$GITHUB_OUTPUT"
           else
-            echo "message=${rate}/s @ 256 submitters (CI runner)" >> "$GITHUB_OUTPUT"
+            echo "message=${rate} jobs/sec @ 256 (CI runner)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Publish badge endpoints
